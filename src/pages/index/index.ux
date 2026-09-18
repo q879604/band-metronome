@@ -8,23 +8,23 @@
       </div>
 
       <div class="bpmbox">
-        <text class="bpm">{{ bpm }}</text>
-        <text class="bpmlab">拍 / 分钟</text>
+        <text class="bpm">{{ speedValueText }}</text>
+        <text class="bpmlab">{{ speedLabelText }}</text>
       </div>
 
       <div class="row">
-        <div class="kbtn" onclick="bpmMinus5"><text class="kbtntext">-5</text></div>
-        <div class="kbtn" onclick="bpmPlus5"><text class="kbtntext">+5</text></div>
+        <div class="kbtn" onclick="speedMinus5"><text class="kbtntext">{{ sm5Text }}</text></div>
+        <div class="kbtn" onclick="speedPlus5"><text class="kbtntext">{{ sp5Text }}</text></div>
       </div>
 
       <div class="row">
-        <div class="kbtn" onclick="bpmMinus1"><text class="kbtntext">-1</text></div>
-        <div class="kbtn" onclick="bpmPlus1"><text class="kbtntext">+1</text></div>
+        <div class="kbtn" onclick="speedMinus1"><text class="kbtntext">{{ sm1Text }}</text></div>
+        <div class="kbtn" onclick="speedPlus1"><text class="kbtntext">{{ sp1Text }}</text></div>
       </div>
 
       <div class="infobox">
-        <text class="info">振动 {{ vibMs }}ms 间隔 {{ gapMs }}ms</text>
-        <text class="info">周期 {{ periodMs }}ms {{ engineText }}</text>
+        <text class="info">振动 {{ vibMs }}ms {{ vibModeText }} · {{ burstText }}</text>
+        <text class="info">间隔 {{ periodMs }}ms · {{ engineText }}</text>
       </div>
 
       <div class="mainbtn" onclick="toggleRun">
@@ -65,12 +65,13 @@
   import prompt from '@system.prompt';
   import {
     sanitize,
-    gapMsOf,
     periodMsOf,
-    actualPeriodMsOf,
+    beatModeOf,
+    burstCountOf,
+    actualVibMsOf,
+    nativeIntervalOf,
     nativeCountOf,
     beatIndexAt,
-    beatModeOf,
     LIMITS,
     clampInt
   } from '../../common/metronome';
@@ -81,9 +82,11 @@
 
   export default {
     private: {
-      bpm: 60,
+      speedValueText: '60',
+      speedLabelText: '拍 / 分钟',
       vibMs: 60,
-      gapMs: 600,
+      vibModeText: '短振动',
+      burstText: '2 击',
       periodMs: 1000,
       running: false,
       runDim: false,
@@ -91,6 +94,11 @@
       statusText: '就绪',
       runText: '开始',
       engineText: '逐拍震动',
+      s5Text: '',
+      sm5Text: '-5',
+      sp5Text: '+5',
+      sm1Text: '-1',
+      sp1Text: '+1',
       hintText: '设置里可调时长 / 间隔 / 屏幕策略',
       tapTip: '连点 5 次恢复亮度'
     },
@@ -99,6 +107,8 @@
     s: null,
     vibTaskId: -1,
     beatTimer: null,
+    burstTimer: null,
+    burstLeft: 0,
     tickTimer: null,
     startedAt: 0,
     taps: [],
@@ -166,12 +176,32 @@
     },
 
     applySettings(raw) {
-      const s = sanitize(raw);
-      this.s = s;
-      this.bpm = s.bpm;
+      this.s = sanitize(raw);
+      this.refresh();
+      this.save();
+    },
+
+    refresh() {
+      const s = this.s;
+      this.periodMs = periodMsOf(s);
+      if (s.speedMode === 'gap') {
+        this.speedValueText = String(this.periodMs);
+        this.speedLabelText = '毫秒 / 拍';
+        this.sm5Text = '-50';
+        this.sp5Text = '+50';
+        this.sm1Text = '-10';
+        this.sp1Text = '+10';
+      } else {
+        this.speedValueText = String(s.bpm);
+        this.speedLabelText = '拍 / 分钟';
+        this.sm5Text = '-5';
+        this.sp5Text = '+5';
+        this.sm1Text = '-1';
+        this.sp1Text = '+1';
+      }
       this.vibMs = s.vibMs;
-      this.gapMs = gapMsOf(s);
-      this.periodMs = actualPeriodMsOf(s);
+      this.vibModeText = s.vibMode === 'long' ? '长振动' : '短振动';
+      this.burstText = burstCountOf(s, 2) + ' 击 × ' + s.burstStep + 'ms';
       this.engineText = s.engine === 'native' ? '原生任务' : '逐拍震动';
       this.hintText =
         s.policy === 'dim'
@@ -246,6 +276,8 @@
       this.statusText = '运行中';
       this.beatCount = 0;
       this.beatTimer = null;
+      this.burstTimer = null;
+      this.burstLeft = 0;
       this.vibTaskId = -1;
       this.tapTip = '连点 5 次恢复亮度';
       this.taps = [];
@@ -279,19 +311,18 @@
     },
 
     startEngine() {
-      const s = this.s;
       this.vibTaskId = -1;
-      if (s.engine === 'native') this.startNativeTask();
+      if (this.s.engine === 'native') this.startNativeTask();
       else this.scheduleBeat();
     },
 
-    /** vibrator.start：官方支持明细里只有 Xiaomi Watch S5 实现了，手环 9 Pro 会走 fail → 自动退回逐拍 */
+    /** vibrator.start：官方支持明细里只有 Xiaomi Watch S5 实现了，手环会 fail → 自动退回逐拍 */
     startNativeTask() {
       const s = this.s;
       try {
         vibrator.start({
           duration: s.vibMs,
-          interval: gapMsOf(s),
+          interval: nativeIntervalOf(s),
           count: nativeCountOf(s),
           success: (d) => {
             if (d && typeof d.id === 'number') this.vibTaskId = d.id;
@@ -318,6 +349,11 @@
         clearTimeout(this.beatTimer);
         this.beatTimer = null;
       }
+      if (this.burstTimer) {
+        clearTimeout(this.burstTimer);
+        this.burstTimer = null;
+      }
+      this.burstLeft = 0;
       if (this.vibTaskId >= 0) {
         try {
           vibrator.stop(this.vibTaskId);
@@ -343,12 +379,34 @@
     onBeat() {
       this.beatTimer = null;
       this.beatCount = this.beatCount + 1;
-      this.vibrateOnce(beatModeOf(this.s, this.beatCount));
+      this.startBurst();
       if (this.s.maxBeats > 0 && this.beatCount >= this.s.maxBeats) {
         this.stopRun();
         return;
       }
       if (this.running) this.scheduleBeat();
+    },
+
+    /** 时长靠连击凑：每 burstStep 毫秒叫一次 vibrate，直到攒够 vibMs */
+    startBurst() {
+      this.burstLeft = burstCountOf(this.s, this.beatCount);
+      this.burstFire();
+    },
+
+    burstFire() {
+      if (this.burstLeft <= 0) {
+        this.burstTimer = null;
+        return;
+      }
+      this.burstLeft = this.burstLeft - 1;
+      this.vibrateOnce(beatModeOf(this.s));
+      if (this.burstLeft > 0) {
+        this.burstTimer = setTimeout(() => {
+          this.burstFire();
+        }, this.s.burstStep);
+      } else {
+        this.burstTimer = null;
+      }
     },
 
     vibrateOnce(mode) {
@@ -392,25 +450,27 @@
 
     /* ---------- 交互 ---------- */
 
-    adjustBpm(delta) {
+    adjustSpeed(delta) {
       if (!this.s) this.applySettings(null);
-      this.s.bpm = clampInt(this.s.bpm + delta, LIMITS.bpm[0], LIMITS.bpm[1]);
+      const s = this.s;
+      if (s.speedMode === 'gap') s.gapMs = clampInt(s.gapMs + delta, LIMITS.gapMs[0], LIMITS.gapMs[1]);
+      else s.bpm = clampInt(s.bpm + delta, LIMITS.bpm[0], LIMITS.bpm[1]);
+      this.refresh();
       this.save();
-      this.applySettings(this.s);
       if (this.running) this.restart();
     },
 
-    bpmMinus5() {
-      this.adjustBpm(-5);
+    speedMinus5() {
+      this.adjustSpeed(this.s && this.s.speedMode === 'gap' ? -50 : -5);
     },
-    bpmPlus5() {
-      this.adjustBpm(5);
+    speedPlus5() {
+      this.adjustSpeed(this.s && this.s.speedMode === 'gap' ? 50 : 5);
     },
-    bpmMinus1() {
-      this.adjustBpm(-1);
+    speedMinus1() {
+      this.adjustSpeed(this.s && this.s.speedMode === 'gap' ? -10 : -1);
     },
-    bpmPlus1() {
-      this.adjustBpm(1);
+    speedPlus1() {
+      this.adjustSpeed(this.s && this.s.speedMode === 'gap' ? 10 : 1);
     },
 
     openSettings() {
@@ -419,9 +479,17 @@
     },
 
     testVibrate() {
+      if (this.running) {
+        prompt.showToast({ message: '运行中，先停止再试震' });
+        return;
+      }
       if (!this.s) this.applySettings(null);
-      this.vibrateOnce('long');
-      prompt.showToast({ message: '已发长振动（9 Pro 只有长/短两档）' });
+      this.beatCount = 1;
+      this.startBurst();
+      prompt.showToast({
+        message:
+          '试震 ' + actualVibMsOf(this.s, 1) + 'ms ' + (this.s.vibMode === 'long' ? '长振动' : '短振动')
+      });
     }
   };
 </script>

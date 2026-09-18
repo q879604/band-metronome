@@ -1,29 +1,31 @@
 /* 腕上节拍器 · 核心逻辑（纯函数，可在 node 下直接跑测试）
    单位统一 ms。
 
-   间隔语义（对应 vibrator.start 的 interval 字段）：
-     gapMode = 'gap'    间隔 = 两拍之间的停顿，周期 = 振动时长 + 间隔（默认，符合文档「振动间隔时间」）
-     gapMode = 'period' 间隔 = 整拍周期，周期 = 间隔（个别固件按周期实现时用它）
-   两种都能选，真机上哪个对就用哪个，不用改代码。 */
+   手环（9/9 Pro 等）只支持 vibrator.vibrate({mode})，且只有 'long'/'short' 两档，
+   没有「时长 / 间隔 / 次数 / 强度」参数。社区做法（米环9「环间跳蛋」）与这里一致：
+   把 vibrate 按 burstStep 毫秒连击若干次，凑出可调的「震动时长」；
+   拍与拍的间隔由我们自己的调度器控制（BPM 或直接填毫秒）。 */
 
 export const DEFAULT_SETTINGS = {
+  speedMode: 'bpm', // 'bpm' 按拍速 / 'gap' 直接填每拍间隔毫秒
   bpm: 60,
-  vibMs: 60,
-  gapMode: 'gap',
-  engine: 'vibrate', // vibrate = 逐拍调 vibrator.vibrate（全机型可用；手环 9/9 Pro 只支持这个）
-  //                   native  = 一次性交给系统任务 vibrator.start（官方支持明细：只有 Xiaomi Watch S5）
-  accent: false, // 首拍重音（仅 timer 模式有效）
+  gapMs: 800, // speedMode==='gap' 时的拍间隔
+  vibMs: 60, // 一次震动的总时长（连击凑出来）
+  vibMode: 'short', // 'long' | 'short'（9 Pro 只有这两档）
+  burstStep: 40, // 连击步长：每 step 毫秒叫一次 vibrate
+  accent: false, // 首拍重音 = 时长翻倍
+  engine: 'vibrate', // vibrate = 逐拍 vibrate（全机型）；native = vibrator.start（仅 Xiaomi Watch S5）
   maxBeats: 0, // 0 = 不限
-  policy: 'dim' // dim = 启动后最低亮度 + 常亮；keep = 保持原亮度但常亮；system = 跟随系统（息屏实验）
+  policy: 'dim' // dim 最低亮度常亮 / keep 保持常亮 / system 跟随系统（息屏实验）
 };
 
 export const LIMITS = {
   bpm: [20, 300],
-  vibMs: [20, 1000],
+  gapMs: [20, 5000],
+  vibMs: [20, 2000],
+  burstStep: [20, 200],
   maxBeats: [0, 9999]
 };
-
-export const GAP_STEP = 10;
 
 export function clampInt(v, lo, hi) {
   let n = Math.round(Number(v));
@@ -36,31 +38,46 @@ export function clampInt(v, lo, hi) {
 export function sanitize(raw) {
   const s = Object.assign({}, DEFAULT_SETTINGS, raw || {});
   s.bpm = clampInt(s.bpm, LIMITS.bpm[0], LIMITS.bpm[1]);
+  s.gapMs = clampInt(s.gapMs, LIMITS.gapMs[0], LIMITS.gapMs[1]);
   s.vibMs = clampInt(s.vibMs, LIMITS.vibMs[0], LIMITS.vibMs[1]);
+  s.burstStep = clampInt(s.burstStep, LIMITS.burstStep[0], LIMITS.burstStep[1]);
   s.maxBeats = clampInt(s.maxBeats, LIMITS.maxBeats[0], LIMITS.maxBeats[1]);
-  s.gapMode = s.gapMode === 'period' ? 'period' : 'gap';
+  s.vibMode = s.vibMode === 'long' ? 'long' : 'short';
+  s.speedMode = s.speedMode === 'gap' ? 'gap' : 'bpm';
   s.engine = s.engine === 'native' ? 'native' : 'vibrate';
   s.policy = s.policy === 'keep' || s.policy === 'system' ? s.policy : 'dim';
   s.accent = !!s.accent;
   return s;
 }
 
-/** 一拍周期（ms） */
+/** 拍与拍之间的间隔（ms）：BPM 换算或直接填的毫秒 */
 export function periodMsOf(s) {
+  if (s.speedMode === 'gap') return clampInt(s.gapMs, LIMITS.gapMs[0], LIMITS.gapMs[1]);
   return Math.round(60000 / clampInt(s.bpm, LIMITS.bpm[0], LIMITS.bpm[1]));
 }
 
-/** 传给 vibrator.start 的 interval */
-export function gapMsOf(s) {
-  const period = periodMsOf(s);
-  const vib = clampInt(s.vibMs, LIMITS.vibMs[0], LIMITS.vibMs[1]);
-  const gap = s.gapMode === 'period' ? period : period - vib;
-  return clampInt(gap, GAP_STEP, 60000);
+/** 只有 long / short 两档，重音靠时长翻倍而不是换 mode */
+export function beatModeOf(s) {
+  return s.vibMode === 'long' ? 'long' : 'short';
 }
 
-/** 实际一拍（振动 + 停顿）的总时长，仅用于显示 */
-export function actualPeriodMsOf(s) {
-  return clampInt(s.vibMs, LIMITS.vibMs[0], LIMITS.vibMs[1]) + gapMsOf(s);
+/** 这一拍要塞几次 vibrate：时长 ÷ 连击步长（重音拍翻倍） */
+export function burstCountOf(s, beatIndex) {
+  const step = clampInt(s.burstStep, LIMITS.burstStep[0], LIMITS.burstStep[1]);
+  let n = Math.ceil(clampInt(s.vibMs, LIMITS.vibMs[0], LIMITS.vibMs[1]) / step);
+  if (n < 1) n = 1;
+  if (s.accent && beatIndex % 4 === 1) n = n * 2;
+  return n;
+}
+
+/** 实际震感时长（连击次数 × 步长），显示用 */
+export function actualVibMsOf(s, beatIndex) {
+  return burstCountOf(s, beatIndex) * clampInt(s.burstStep, LIMITS.burstStep[0], LIMITS.burstStep[1]);
+}
+
+/** 原生任务（仅 S5）用的 interval：间隔 = 拍间隔 - 震动时长 */
+export function nativeIntervalOf(s) {
+  return clampInt(periodMsOf(s) - s.vibMs, 10, 60000);
 }
 
 /** 原生任务要跑多少拍；不限时给一个足够大但仍有限的次数（防跑飞） */
@@ -68,14 +85,9 @@ export function nativeCountOf(s) {
   return s.maxBeats > 0 ? s.maxBeats : 100000;
 }
 
-/** 每拍用的振动模式：手环 9 Pro 只有 long / short 两档（重音 = 长振动） */
-export function beatModeOf(s, beatIndex) {
-  return s.accent && beatIndex % 4 === 1 ? 'long' : 'short';
-}
-
 /** 已跑时长 → 当前第几拍（1 起） */
 export function beatIndexAt(elapsedMs, periodMs) {
-  const p = Math.max(GAP_STEP, periodMs);
+  const p = Math.max(LIMITS.gapMs[0], periodMs);
   return Math.floor(Math.max(0, elapsedMs) / p) + 1;
 }
 
@@ -87,6 +99,12 @@ export function reachedLimit(beatIndex, maxBeats) {
 /** 主界面一行摘要 */
 export function summaryOf(s) {
   return (
-    '振动 ' + s.vibMs + 'ms 间隔 ' + gapMsOf(s) + 'ms 周期 ' + actualPeriodMsOf(s) + 'ms'
+    '振动 ' +
+    s.vibMs +
+    'ms(' +
+    (s.vibMode === 'long' ? '长' : '短') +
+    ') 间隔 ' +
+    periodMsOf(s) +
+    'ms'
   );
 }

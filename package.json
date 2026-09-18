@@ -1,6 +1,6 @@
 {
   "name": "band-metronome",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "腕上节拍器 —— 小米手环 / 手表 Vela 快应用（震动节拍 · 最低亮度常亮 · 连点5次恢复亮度）",
   "engines": {
