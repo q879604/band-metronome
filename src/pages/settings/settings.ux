@@ -32,6 +32,7 @@
           <div class="kbtn" onclick="vibMinus"><text class="kbtntext">-10</text></div>
           <div class="kbtn" onclick="vibPlus"><text class="kbtntext">+10</text></div>
         </div>
+        <text class="note">9 Pro 只有系统长/短两档，时长参数仅对支持原生任务的机型生效</text>
       </div>
 
       <div class="grp">
@@ -54,14 +55,15 @@
           <text class="valtext">{{ engineText }}</text>
         </div>
         <div class="row">
+          <div class="kbtn" onclick="setBeat"><text class="kbtntext">逐拍震动</text></div>
           <div class="kbtn" onclick="setNative"><text class="kbtntext">原生任务</text></div>
-          <div class="kbtn" onclick="setTimer"><text class="kbtntext">JS 逐拍</text></div>
         </div>
-        <text class="note">原生任务整段交给系统，息屏后更可能继续；JS 逐拍能做重音</text>
+        <text class="note">逐拍 = vibrator.vibrate，所有机型支持（手环 9 Pro 只能用这个）</text>
+        <text class="note">原生任务 = vibrator.start，官方只给 Xiaomi Watch S5 实现</text>
       </div>
 
       <div class="grp">
-        <text class="grpname">首拍重音（JS 逐拍模式）</text>
+        <text class="grpname">首拍重音（重音 = 长振动）</text>
         <div class="valrow">
           <text class="valname">当前</text>
           <text class="valtext">{{ accentText }}</text>
@@ -103,13 +105,19 @@
 
       <div class="grp">
         <text class="grpname">震动强度</text>
-        <text class="note">手环只开放系统级强度（当前 {{ strengthText }}），应用无法单独调速</text>
+        <text class="note">当前 {{ strengthText }}；9 Pro 未实现读取/设置，应用无法单独调速</text>
         <text class="note">改强度：手环「设置 → 振动强度」或小米运动健康里调</text>
       </div>
 
       <div class="grp">
+        <text class="grpname">本机能力自检</text>
+        <text class="note">{{ selfTestText }}</text>
         <div class="row">
-          <div class="kbtn" onclick="testVib"><text class="kbtntext">试震</text></div>
+          <div class="kbtn" onclick="testVibShort"><text class="kbtntext">试震-短</text></div>
+          <div class="kbtn" onclick="testVibLong"><text class="kbtntext">试震-长</text></div>
+        </div>
+        <div class="row">
+          <div class="kbtn" onclick="testNative"><text class="kbtntext">测原生任务</text></div>
           <div class="kbtn" onclick="back"><text class="kbtntext">返回</text></div>
         </div>
       </div>
@@ -146,7 +154,8 @@
       accentText: '关',
       policyText: '最低亮度',
       maxBeatsText: '不限',
-      strengthText: '强度：标准振动'
+      strengthText: '强度：-',
+      selfTestText: '点下面按钮自检本机能力'
     },
 
     s: null,
@@ -188,7 +197,7 @@
       this.bpm = s.bpm;
       this.vibMs = s.vibMs;
       this.gapModeText = s.gapMode === 'period' ? '间隔=整拍' : '间隔=停顿';
-      this.engineText = s.engine === 'timer' ? 'JS 逐拍' : '原生任务';
+      this.engineText = s.engine === 'native' ? '原生任务' : '逐拍震动';
       this.accentText = s.accent ? '开' : '关';
       this.policyText =
         s.policy === 'dim' ? '最低亮度' : s.policy === 'keep' ? '保持常亮' : '跟随系统';
@@ -208,9 +217,10 @@
       try {
         const m = vibrator.getSystemDefaultMode();
         const names = ['关闭振动', '标准振动', '加强振动'];
-        this.strengthText = '强度：' + (names[m] || String(m));
+        this.strengthText = typeof m === 'number' && names[m] ? '强度：' + names[m] : '强度：本机不支持读取';
       } catch (e) {
-        this.strengthText = '强度：未知';
+        // 手环 9/9 Pro 未实现 getSystemDefaultMode（官方支持明细：仅 Xiaomi Watch S5）
+        this.strengthText = '强度：本机不支持读取';
       }
     },
 
@@ -260,8 +270,8 @@
       this.s.engine = 'native';
       this.commit();
     },
-    setTimer() {
-      this.s.engine = 'timer';
+    setBeat() {
+      this.s.engine = 'vibrate';
       this.commit();
     },
     accentOn() {
@@ -308,15 +318,48 @@
 
     /* ---------- 试震 / 返回 ---------- */
 
-    testVib() {
-      vibrator.start({
-        duration: this.s.vibMs,
-        interval: 80,
-        count: 2,
-        fail: (data, code) => {
-          prompt.showToast({ message: '试震失败 ' + code });
-        }
-      });
+    testVibShort() {
+      this.vibrateOnce('short');
+      this.selfTestText = '已发短振动（系统标准档）';
+    },
+
+    testVibLong() {
+      this.vibrateOnce('long');
+      this.selfTestText = '已发长振动（系统加强档）';
+    },
+
+    vibrateOnce(mode) {
+      try {
+        vibrator.vibrate({ mode: mode });
+      } catch (e) {
+        this.selfTestText = 'vibrate 调用异常：' + e;
+      }
+    },
+
+    // 实测 vibrator.start 在本机到底有没有实现
+    testNative() {
+      let done = false;
+      this.selfTestText = '正在测原生任务…';
+      try {
+        vibrator.start({
+          duration: this.s.vibMs,
+          interval: 200,
+          count: 2,
+          success: (d) => {
+            done = true;
+            this.selfTestText = 'start 可用，任务 id=' + (d && d.id != null ? d.id : '?');
+          },
+          fail: (data, code) => {
+            done = true;
+            this.selfTestText = 'start 不支持（错误码 ' + code + '）';
+          }
+        });
+      } catch (e) {
+        this.selfTestText = 'start 调用直接抛异常 → 本机未实现';
+      }
+      setTimeout(() => {
+        if (!done) this.selfTestText = 'start 无任何回调 → 本机未实现';
+      }, 900);
     },
 
     back() {

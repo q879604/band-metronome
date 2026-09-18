@@ -30,7 +30,7 @@ function ok(name, cond) {
 const s1 = M.sanitize({ bpm: 999, vibMs: -5, engine: 'x', gapMode: 'y', policy: 'z', maxBeats: 1e9 });
 eq('bpm 上限', s1.bpm, 300);
 eq('vibMs 下限', s1.vibMs, 20);
-eq('engine 回落', s1.engine, 'native');
+eq('engine 回落', s1.engine, 'vibrate');
 eq('gapMode 回落', s1.gapMode, 'gap');
 eq('policy 回落', s1.policy, 'dim');
 eq('maxBeats 上限', s1.maxBeats, 9999);
@@ -60,6 +60,12 @@ eq('不限不会停', M.reachedLimit(99999, 0), false);
 // 极端 bpm
 ok('20bpm 周期 3000ms', M.periodMsOf({ bpm: 20 }) === 3000);
 ok('300bpm 周期 200ms', M.periodMsOf({ bpm: 300 }) === 200);
+
+// 振动模式映射（9 Pro 只有 long / short）
+eq('无重音 → short', M.beatModeOf({ accent: false }, 1), 'short');
+eq('重音第1拍 → long', M.beatModeOf({ accent: true }, 1), 'long');
+eq('重音第2拍 → short', M.beatModeOf({ accent: true }, 2), 'short');
+eq('重音第5拍 → long', M.beatModeOf({ accent: true }, 5), 'long');
 
 console.log('logic self-test: ' + pass + ' passed, ' + fail + ' failed');
 if (fail) process.exit(1);

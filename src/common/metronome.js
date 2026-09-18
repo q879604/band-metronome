@@ -10,7 +10,8 @@ export const DEFAULT_SETTINGS = {
   bpm: 60,
   vibMs: 60,
   gapMode: 'gap',
-  engine: 'native', // native = 一次交给系统振动任务；timer = JS 定时逐拍触发
+  engine: 'vibrate', // vibrate = 逐拍调 vibrator.vibrate（全机型可用；手环 9/9 Pro 只支持这个）
+  //                   native  = 一次性交给系统任务 vibrator.start（官方支持明细：只有 Xiaomi Watch S5）
   accent: false, // 首拍重音（仅 timer 模式有效）
   maxBeats: 0, // 0 = 不限
   policy: 'dim' // dim = 启动后最低亮度 + 常亮；keep = 保持原亮度但常亮；system = 跟随系统（息屏实验）
@@ -38,7 +39,7 @@ export function sanitize(raw) {
   s.vibMs = clampInt(s.vibMs, LIMITS.vibMs[0], LIMITS.vibMs[1]);
   s.maxBeats = clampInt(s.maxBeats, LIMITS.maxBeats[0], LIMITS.maxBeats[1]);
   s.gapMode = s.gapMode === 'period' ? 'period' : 'gap';
-  s.engine = s.engine === 'timer' ? 'timer' : 'native';
+  s.engine = s.engine === 'native' ? 'native' : 'vibrate';
   s.policy = s.policy === 'keep' || s.policy === 'system' ? s.policy : 'dim';
   s.accent = !!s.accent;
   return s;
@@ -65,6 +66,11 @@ export function actualPeriodMsOf(s) {
 /** 原生任务要跑多少拍；不限时给一个足够大但仍有限的次数（防跑飞） */
 export function nativeCountOf(s) {
   return s.maxBeats > 0 ? s.maxBeats : 100000;
+}
+
+/** 每拍用的振动模式：手环 9 Pro 只有 long / short 两档（重音 = 长振动） */
+export function beatModeOf(s, beatIndex) {
+  return s.accent && beatIndex % 4 === 1 ? 'long' : 'short';
 }
 
 /** 已跑时长 → 当前第几拍（1 起） */

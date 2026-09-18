@@ -70,6 +70,7 @@
     actualPeriodMsOf,
     nativeCountOf,
     beatIndexAt,
+    beatModeOf,
     LIMITS,
     clampInt
   } from '../../common/metronome';
@@ -89,7 +90,7 @@
       beatCount: 0,
       statusText: '就绪',
       runText: '开始',
-      engineText: '原生任务',
+      engineText: '逐拍震动',
       hintText: '设置里可调时长 / 间隔 / 屏幕策略',
       tapTip: '连点 5 次恢复亮度'
     },
@@ -171,7 +172,7 @@
       this.vibMs = s.vibMs;
       this.gapMs = gapMsOf(s);
       this.periodMs = actualPeriodMsOf(s);
-      this.engineText = s.engine === 'timer' ? 'JS 逐拍' : '原生任务';
+      this.engineText = s.engine === 'native' ? '原生任务' : '逐拍震动';
       this.hintText =
         s.policy === 'dim'
           ? '启动后降到最低亮度并常亮'
@@ -244,6 +245,8 @@
       this.runText = '停止';
       this.statusText = '运行中';
       this.beatCount = 0;
+      this.beatTimer = null;
+      this.vibTaskId = -1;
       this.tapTip = '连点 5 次恢复亮度';
       this.taps = [];
       this.startedAt = Date.now();
@@ -277,12 +280,15 @@
 
     startEngine() {
       const s = this.s;
-      if (s.engine === 'timer') {
-        this.beat();
-        this.beatTimer = setInterval(() => {
-          this.beat();
-        }, periodMsOf(s));
-      } else {
+      this.vibTaskId = -1;
+      if (s.engine === 'native') this.startNativeTask();
+      else this.scheduleBeat();
+    },
+
+    /** vibrator.start：官方支持明细里只有 Xiaomi Watch S5 实现了，手环 9 Pro 会走 fail → 自动退回逐拍 */
+    startNativeTask() {
+      const s = this.s;
+      try {
         vibrator.start({
           duration: s.vibMs,
           interval: gapMsOf(s),
@@ -292,15 +298,24 @@
           },
           fail: (data, code) => {
             console.log('vibrator.start fail, code=' + code);
-            this.statusText = '震动启动失败 ' + code;
+            this.fallbackToBeat();
           }
         });
+      } catch (e) {
+        console.log('vibrator.start throw ' + e);
+        this.fallbackToBeat();
       }
+    },
+
+    fallbackToBeat() {
+      if (!this.running || this.beatTimer) return;
+      this.statusText = '本机不支持原生任务，已切逐拍';
+      this.scheduleBeat();
     },
 
     stopEngine() {
       if (this.beatTimer) {
-        clearInterval(this.beatTimer);
+        clearTimeout(this.beatTimer);
         this.beatTimer = null;
       }
       if (this.vibTaskId >= 0) {
@@ -313,23 +328,44 @@
       }
     },
 
-    /* ---------- 每拍 / 计数 ---------- */
+    /* ---------- 逐拍调度（按 startedAt 重算目标时刻，避免 setTimeout 累积漂移） ---------- */
 
-    beat() {
-      const s = this.s;
-      const strong = s.accent && this.beatCount % 4 === 0;
+    scheduleBeat() {
+      const period = periodMsOf(this.s);
+      const target = this.startedAt + this.beatCount * period;
+      let delay = target - Date.now();
+      if (delay < 5) delay = 5;
+      this.beatTimer = setTimeout(() => {
+        this.onBeat();
+      }, delay);
+    },
+
+    onBeat() {
+      this.beatTimer = null;
+      this.beatCount = this.beatCount + 1;
+      this.vibrateOnce(beatModeOf(this.s, this.beatCount));
+      if (this.s.maxBeats > 0 && this.beatCount >= this.s.maxBeats) {
+        this.stopRun();
+        return;
+      }
+      if (this.running) this.scheduleBeat();
+    },
+
+    vibrateOnce(mode) {
       try {
-        vibrator.vibrate({ mode: strong ? 'long' : 'short' });
+        vibrator.vibrate({ mode: mode });
       } catch (e) {
         console.log('vibrate error ' + e);
       }
-      this.beatCount = this.beatCount + 1;
     },
+
+    /* ---------- 显示计数（原生任务模式没有逐拍回调，靠时间推算） ---------- */
 
     tick() {
       const s = this.s;
+      if (this.beatTimer) return;
       const n = beatIndexAt(Date.now() - this.startedAt, periodMsOf(s));
-      if (s.engine !== 'timer') this.beatCount = n;
+      this.beatCount = n;
       if (s.maxBeats > 0 && n >= s.maxBeats) this.stopRun();
     },
 
@@ -383,19 +419,9 @@
     },
 
     testVibrate() {
-      if (this.running) {
-        prompt.showToast({ message: '运行中，先停止再试震' });
-        return;
-      }
       if (!this.s) this.applySettings(null);
-      vibrator.start({
-        duration: this.s.vibMs,
-        interval: 80,
-        count: 2,
-        fail: (data, code) => {
-          prompt.showToast({ message: '试震失败 ' + code });
-        }
-      });
+      this.vibrateOnce('long');
+      prompt.showToast({ message: '已发长振动（9 Pro 只有长/短两档）' });
     }
   };
 </script>
