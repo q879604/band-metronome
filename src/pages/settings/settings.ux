@@ -28,6 +28,20 @@
       </div>
 
       <div class="grp">
+        <text class="grpname">震动强度（1~5 档）</text>
+        <div class="valrow">
+          <text class="valname">当前</text>
+          <text class="valtext">{{ strengthText }}</text>
+        </div>
+        <div class="row">
+          <div class="kbtn" onclick="strengthMinus"><text class="kbtntext">强度 －</text></div>
+          <div class="kbtn" onclick="strengthPlus"><text class="kbtntext">强度 ＋</text></div>
+        </div>
+        <text class="note">手环没有强度参数，这里改的是「长/短振动 + 连击步长」：档越高步长越小，马达还没停就被再次叫起 → 震感越强</text>
+        <text class="note">想要最猛：先把「连击步长」拉到最小，再把「振动类型」设为长振动</text>
+      </div>
+
+      <div class="grp">
         <text class="grpname">振动时长</text>
         <div class="valrow">
           <text class="valname">设定</text>
@@ -122,9 +136,9 @@
       </div>
 
       <div class="grp">
-        <text class="grpname">震动强度</text>
+        <text class="grpname">系统振动强度</text>
         <text class="note">当前 {{ strengthText }}；9 Pro 未实现读取/设置，应用无法单独调速</text>
-        <text class="note">改强度：手环「设置 → 振动强度」或小米运动健康里调</text>
+        <text class="note">改强度：手环「设置 → 振动强度」选「加强」，这是震感的上限</text>
       </div>
 
       <div class="grp">
@@ -136,9 +150,10 @@
         </div>
         <div class="row">
           <div class="kbtn" onclick="testCurrent"><text class="kbtntext">试当前设置</text></div>
-          <div class="kbtn" onclick="testNative"><text class="kbtntext">测原生任务</text></div>
+          <div class="kbtn" onclick="testMax"><text class="kbtntext">试最强3秒</text></div>
         </div>
         <div class="row">
+          <div class="kbtn" onclick="testNative"><text class="kbtntext">测原生任务</text></div>
           <div class="kbtn" onclick="back"><text class="kbtntext">返回</text></div>
         </div>
       </div>
@@ -160,6 +175,9 @@
     beatModeOf,
     burstCountOf,
     actualVibMsOf,
+    presetOf,
+    applyStrength,
+    strengthLabelOf,
     LIMITS,
     clampInt
   } from '../../common/metronome';
@@ -177,6 +195,7 @@
       vibMs: 60,
       burstText: '',
       stepMs: 40,
+      strengthText: '3 中',
       vibModeText: '短振动',
       accentText: '关',
       engineText: '逐拍震动',
@@ -248,6 +267,7 @@
       }
       this.vibMs = s.vibMs;
       this.stepMs = s.burstStep;
+      this.strengthText = strengthLabelOf(s);
       this.burstText =
         '设为 ' + s.vibMs + 'ms → 每拍连击 ' + burstCountOf(s, 2) + ' 次，实际震 ' + actualVibMsOf(s, 2) + 'ms';
       this.vibModeText = s.vibMode === 'long' ? '长振动' : '短振动';
@@ -305,6 +325,23 @@
     },
     speedPlus1() {
       this.adjustSpeed(this.s.speedMode === 'gap' ? 10 : 1);
+    },
+
+    /* ---------- 强度档 ---------- */
+
+    strengthMinus() {
+      this.adjustStrength(-1);
+    },
+
+    strengthPlus() {
+      this.adjustStrength(1);
+    },
+
+    adjustStrength(delta) {
+      const cur = presetOf(this.s.strength).level;
+      applyStrength(this.s, cur + delta);
+      this.commit();
+      this.selfTestText = '强度已设为 ' + this.strengthText;
     },
 
     /* ---------- 时长 / 步长 / 类型 ---------- */
@@ -426,6 +463,15 @@
       } else {
         this.burstTimer = null;
       }
+    },
+
+    /** 最强档连击 3 秒，直接感受上限 */
+    testMax() {
+      applyStrength(this.s, 5);
+      this.commit();
+      this.burstLeft = Math.ceil(3000 / this.s.burstStep);
+      this.burstFire();
+      this.selfTestText = '最强档（长振动 + ' + this.s.burstStep + 'ms 步长）连击 3 秒…';
     },
 
     /** 实测 vibrator.start 在本机到底有没有实现 */

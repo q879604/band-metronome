@@ -14,17 +14,19 @@
 
       <div class="row">
         <div class="kbtn" onclick="speedMinus5"><text class="kbtntext">{{ sm5Text }}</text></div>
+        <div class="kbtn" onclick="speedMinus1"><text class="kbtntext">{{ sm1Text }}</text></div>
+        <div class="kbtn" onclick="speedPlus1"><text class="kbtntext">{{ sp1Text }}</text></div>
         <div class="kbtn" onclick="speedPlus5"><text class="kbtntext">{{ sp5Text }}</text></div>
       </div>
 
-      <div class="row">
-        <div class="kbtn" onclick="speedMinus1"><text class="kbtntext">{{ sm1Text }}</text></div>
-        <div class="kbtn" onclick="speedPlus1"><text class="kbtntext">{{ sp1Text }}</text></div>
+      <div class="infobox">
+        <text class="info">振动 {{ vibMs }}ms {{ vibModeText }} · 强度 {{ strengthText }}</text>
+        <text class="info">间隔 {{ periodMs }}ms · {{ engineText }}</text>
       </div>
 
-      <div class="infobox">
-        <text class="info">振动 {{ vibMs }}ms {{ vibModeText }} · {{ burstText }}</text>
-        <text class="info">间隔 {{ periodMs }}ms · {{ engineText }}</text>
+      <div class="row">
+        <div class="kbtn" onclick="strengthMinus"><text class="kbtntext">强度 －</text></div>
+        <div class="kbtn" onclick="strengthPlus"><text class="kbtntext">强度 ＋</text></div>
       </div>
 
       <div class="mainbtn" onclick="toggleRun">
@@ -72,6 +74,9 @@
     nativeIntervalOf,
     nativeCountOf,
     beatIndexAt,
+    presetOf,
+    applyStrength,
+    strengthLabelOf,
     LIMITS,
     clampInt
   } from '../../common/metronome';
@@ -86,6 +91,7 @@
       speedLabelText: '拍 / 分钟',
       vibMs: 60,
       vibModeText: '短振动',
+      strengthText: '3 中',
       burstText: '2 击',
       periodMs: 1000,
       running: false,
@@ -201,6 +207,7 @@
       }
       this.vibMs = s.vibMs;
       this.vibModeText = s.vibMode === 'long' ? '长振动' : '短振动';
+      this.strengthText = strengthLabelOf(s);
       this.burstText = burstCountOf(s, 2) + ' 击 × ' + s.burstStep + 'ms';
       this.engineText = s.engine === 'native' ? '原生任务' : '逐拍震动';
       this.hintText =
@@ -471,6 +478,26 @@
     },
     speedPlus1() {
       this.adjustSpeed(this.s && this.s.speedMode === 'gap' ? 10 : 1);
+    },
+
+    /* ---------- 强度：一次跳一档（本质是改 vibMode + 连击步长） ---------- */
+
+    strengthMinus() {
+      this.adjustStrength(-1);
+    },
+
+    strengthPlus() {
+      this.adjustStrength(1);
+    },
+
+    adjustStrength(delta) {
+      if (!this.s) this.applySettings(null);
+      const cur = presetOf(this.s.strength).level;
+      applyStrength(this.s, cur + delta);
+      this.refresh();
+      this.save();
+      if (this.running) this.restart();
+      prompt.showToast({ message: '强度 ' + this.strengthText });
     },
 
     openSettings() {

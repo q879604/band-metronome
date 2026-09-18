@@ -71,6 +71,17 @@ eq('短振动', M.beatModeOf({ vibMode: 'short' }), 'short');
 eq('长振动', M.beatModeOf({ vibMode: 'long' }), 'long');
 eq('非法值回落短振动', M.beatModeOf({ vibMode: 'x' }), 'short');
 
+// 强度档：本质是 vibMode + burstStep 的预设组合
+eq('强度 5 = long/20ms', JSON.stringify(M.presetOf(5)), JSON.stringify({ level: 5, name: '最强', mode: 'long', step: 20 }));
+eq('强度 1 = short/100ms', M.presetOf(1).step, 100);
+eq('强度越界钳制', M.presetOf(99).level, 5);
+const s5 = M.applyStrength({}, 5);
+eq('applyStrength 写 mode', s5.vibMode, 'long');
+eq('applyStrength 写 step', s5.burstStep, 20);
+eq('强度 5 震感时长（100ms 设定）', M.actualVibMsOf({ vibMs: 100, burstStep: 20, accent: false }, 2), 100);
+eq('标签识别档位', M.strengthLabelOf({ vibMode: 'long', burstStep: 20 }), '5 最强');
+eq('标签识别自定义', M.strengthLabelOf({ vibMode: 'long', burstStep: 33 }), '自定义');
+
 // 原生任务参数（仅 S5）
 eq('原生 interval = 拍间隔 - 时长', M.nativeIntervalOf({ speedMode: 'bpm', bpm: 60, vibMs: 100 }), 900);
 ok('时长超过拍间隔时 interval 不为负', M.nativeIntervalOf({ speedMode: 'bpm', bpm: 300, vibMs: 2000 }) >= 10);

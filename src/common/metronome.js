@@ -11,8 +11,9 @@ export const DEFAULT_SETTINGS = {
   bpm: 60,
   gapMs: 800, // speedMode==='gap' 时的拍间隔
   vibMs: 60, // 一次震动的总时长（连击凑出来）
-  vibMode: 'short', // 'long' | 'short'（9 Pro 只有这两档）
-  burstStep: 40, // 连击步长：每 step 毫秒叫一次 vibrate
+  vibMode: 'long', // 'long' | 'short'（9 Pro 只有这两档，long 带动马达更久 → 震感更强）
+  burstStep: 25, // 连击步长：每 step 毫秒叫一次 vibrate（越小越连续、越强）
+  strength: 4, // 强度档 1~5（本质就是 vibMode + burstStep 的快捷档）
   accent: false, // 首拍重音 = 时长翻倍
   engine: 'vibrate', // vibrate = 逐拍 vibrate（全机型）；native = vibrator.start（仅 Xiaomi Watch S5）
   maxBeats: 0, // 0 = 不限
@@ -43,6 +44,7 @@ export function sanitize(raw) {
   s.burstStep = clampInt(s.burstStep, LIMITS.burstStep[0], LIMITS.burstStep[1]);
   s.maxBeats = clampInt(s.maxBeats, LIMITS.maxBeats[0], LIMITS.maxBeats[1]);
   s.vibMode = s.vibMode === 'long' ? 'long' : 'short';
+  s.strength = clampInt(s.strength, 1, 5);
   s.speedMode = s.speedMode === 'gap' ? 'gap' : 'bpm';
   s.engine = s.engine === 'native' ? 'native' : 'vibrate';
   s.policy = s.policy === 'keep' || s.policy === 'system' ? s.policy : 'dim';
@@ -59,6 +61,46 @@ export function periodMsOf(s) {
 /** 只有 long / short 两档，重音靠时长翻倍而不是换 mode */
 export function beatModeOf(s) {
   return s.vibMode === 'long' ? 'long' : 'short';
+}
+
+/* 手环没有强度参数，能改变「震感强弱」的只有两件事：
+   ① 用 long 还是 short（long 带动马达更久）
+   ② 连击步长：步长越小，马达还没停就被再次叫起，等于一直满速转 → 震感最强
+   所以强度档 = 上面两者的预设组合。 */
+export const STRENGTH_PRESETS = [
+  { level: 1, name: '微', mode: 'short', step: 100 },
+  { level: 2, name: '轻', mode: 'short', step: 60 },
+  { level: 3, name: '中', mode: 'short', step: 40 },
+  { level: 4, name: '强', mode: 'long', step: 25 },
+  { level: 5, name: '最强', mode: 'long', step: 20 }
+];
+
+export function presetOf(level) {
+  const n = clampInt(level, 1, 5);
+  for (let i = 0; i < STRENGTH_PRESETS.length; i++) {
+    if (STRENGTH_PRESETS[i].level === n) return STRENGTH_PRESETS[i];
+  }
+  return STRENGTH_PRESETS[2];
+}
+
+/** 把强度档写进 vibMode / burstStep */
+export function applyStrength(s, level) {
+  const p = presetOf(level);
+  s.strength = p.level;
+  s.vibMode = p.mode;
+  s.burstStep = p.step;
+  return s;
+}
+
+/** 当前参数对得上哪一档（对不上就是自定义） */
+export function strengthLabelOf(s) {
+  for (let i = 0; i < STRENGTH_PRESETS.length; i++) {
+    const p = STRENGTH_PRESETS[i];
+    if (p.mode === s.vibMode && p.step === clampInt(s.burstStep, LIMITS.burstStep[0], LIMITS.burstStep[1])) {
+      return p.level + ' ' + p.name;
+    }
+  }
+  return '自定义';
 }
 
 /** 这一拍要塞几次 vibrate：时长 ÷ 连击步长（重音拍翻倍） */
