@@ -1,0 +1,84 @@
+# Release：推 v* 标签（或手动触发）→ 构建 rpk 并发布到 GitHub Release
+#
+# 签名（可选，证书绝不提交仓库）：
+#   本地：tar -czf sign.tar.gz sign/ && base64 -w0 sign.tar.gz
+#   粘贴到 仓库 Settings → Secrets and variables → Actions，名称 SIGN_ARCHIVE
+#   未配置时自动退回 debug 包（toolkit 内置调试证书签名，可直接安装到手表）
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要发布的 tag（必须已推送到远端），例如 v0.1.0'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install --no-audit --no-fund
+          fi
+
+      - name: Logic self-test
+        run: npm test
+
+      - name: Restore signing certificate (optional)
+        run: |
+          if [ -n "${{ secrets.SIGN_ARCHIVE }}" ]; then
+            echo "${{ secrets.SIGN_ARCHIVE }}" | base64 -d > sign.tar.gz
+            tar -xzf sign.tar.gz
+            rm -f sign.tar.gz
+            ls -l sign/ || true
+            echo "SIGNED=1" >> $GITHUB_ENV
+          else
+            echo "::warning::未配置 SIGN_ARCHIVE，本次产出 debug 包（内置调试证书，可直接安装）"
+            echo "SIGNED=0" >> $GITHUB_ENV
+          fi
+
+      - name: Build release RPK
+        run: |
+          if [ "$SIGNED" = "1" ]; then
+            npm run release
+          else
+            npm run release || npm run build
+            ls -l dist/ || true
+          fi
+
+      - name: Collect artifacts
+        id: collect
+        run: |
+          ls -l dist/
+          FILES=$(ls dist/*.rpk 2>/dev/null | tr '\n' ' ')
+          echo "files=$FILES" >> $GITHUB_OUTPUT
+          if [ -z "$FILES" ]; then echo "::error::没有产出 rpk"; exit 1; fi
+
+      - name: Publish to Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "$TAG" --notes "腕上节拍器 $TAG"
+          gh release upload "$TAG" ${{ steps.collect.outputs.files }} --clobber
+          gh release view "$TAG" --json assets --jq '.assets[].name'

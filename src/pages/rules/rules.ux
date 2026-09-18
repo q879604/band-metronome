@@ -1,0 +1,118 @@
+<template>
+  <div class="page">
+    <div class="header">
+      <div class="back" onclick="goBack">
+        <text class="back-text">&lt;</text>
+      </div>
+      <text class="header-title">规则</text>
+    </div>
+
+    <scroll class="body" scroll-y="true">
+      <div class="doc" style="width: {{ listW }}px;">
+        <div class="doc-block">
+          <text class="doc-title">五子棋</text>
+          <text class="doc-text">11 × 11 棋盘，黑先手，先连成五子（横/竖/斜）者胜。</text>
+          <text class="doc-text">棋盘默认放大，按住拖动可平移；点一下瞄准，再点同一点落子；方向键微调。</text>
+          <text class="doc-text">单人：你执黑，AI 执白，新手/普通/困难三档。双人：轮流落子。</text>
+        </div>
+
+        <div class="doc-block">
+          <text class="doc-title">大富翁</text>
+          <text class="doc-text">2 ~ 4 人同表轮流。掷骰走格，经过起点 +100。</text>
+          <text class="doc-text">地产可买可升级（花等额房价翻倍租金）；机会卡有加钱/扣钱/传送；税格交钱。</text>
+          <text class="doc-text">彩蛋格：赌场（下注 300，45% 赢）、捡到钱、汽车站（前进 3 格）、机场（花 200 随机飞）、监狱（暂停一轮）。</text>
+          <text class="doc-text">破产出局，60 回合后比总资产定胜负。</text>
+          <text class="doc-text">可选「对战 AI」（你 + 1~3 AI）或「同表多人」轮流操作。</text>
+        </div>
+
+        <div class="doc-block">
+          <text class="doc-title">狼人杀</text>
+          <text class="doc-text">5 ~ 8 人同表。1~2 狼人 · 预言家 · 女巫 · 平民若干。</text>
+          <text class="doc-text">依次传阅看身份；夜晚主持人操作：狼人刀人 到 预言家验人 到 女巫救/毒；天亮公布死讯。</text>
+          <text class="doc-text">白天依次投票，最高票出局（平票无人出局）。狼人全灭好人胜；狼 ≥ 好人狼胜。</text>
+        </div>
+
+        <div class="doc-block">
+          <text class="doc-title">扑克牌类 · 斗地主</text>
+          <text class="doc-text">3 人（你 + 2 AI），地主随机并收 3 张底牌。</text>
+          <text class="doc-text">牌型：单/对/三带一/三带二/顺子(≥5)/连对(≥3 对)/炸弹/火箭；顺子须同长度，不含 2 与王。</text>
+          <text class="doc-text">先出完者胜。可选对战 AI（你+2 AI）或同表多人（3 人轮流，交接时遮罩隐藏手牌）。</text>
+        </div>
+
+        <div class="doc-block">
+          <text class="doc-title">扑克牌类 · 骗子酒馆</text>
+          <text class="doc-text">2 ~ 4 人，每人 3 条命 + 5 张牌。每轮宣布目标点数，按顺序盖牌声称都是该点数（1~3 张）。</text>
+          <text class="doc-text">下一位可「喊骗子」翻开上家：有假牌 到 上家掉命；全是真的 到 喊话者掉命。</text>
+          <text class="doc-text">一圈无人喊 到 平安收牌。命归零出局，最后存活者胜。</text>
+          <text class="doc-text">可选对战 AI 或同表多人（2~4 人轮流）。</text>
+        </div>
+
+        <div class="doc-block">
+          <text class="doc-title">谁是卧底</text>
+          <text class="doc-text">4 ~ 8 人。1 人拿「卧底词」，其余人拿相近的「平民词」。</text>
+          <text class="doc-text">依次传阅看词；按随机顺序描述自己的词但不能直接说；投票找出卧底。</text>
+        </div>
+
+        <div class="doc-block">
+          <text class="doc-title">三国杀</text>
+          <text class="doc-text">2 ~ 8 人身份局：主公+忠臣+反贼+内奸，按人数自动配比。</text>
+          <text class="doc-text">牌：杀/闪/桃/决斗/无中生有/过河拆桥/顺手牵羊/无懈可击。每回合 1 杀，出牌阶段后自动弃牌到 HP。</text>
+          <text class="doc-text">主公死 到 反贼胜（仅剩内奸则内奸胜）；反贼与内奸全灭 到 主公/忠臣胜。</text>
+          <text class="doc-text">腕上简化：无装备、无武将技能、濒死一桃救回 HP=1、无懈可击自动生效。</text>
+          <text class="doc-text">可选对战 AI 或同表多人（2~8 人轮流，各看各的手牌与身份）。</text>
+        </div>
+
+        <div class="doc-block">
+          <text class="doc-title">UNO</text>
+          <text class="doc-text">2 ~ 4 人（你 + 1~3 AI）。同色/同数字/同功能可出；禁/反/+2/变色/+4。</text>
+          <text class="doc-text">+2/+4 不叠加，被罚者跳过；先出完手牌者胜。</text>
+          <text class="doc-text">可选对战 AI 或同表多人（2~4 人轮流）。</text>
+        </div>
+
+        <div class="doc-block">
+          <text class="doc-title">腕上小贴士</text>
+          <text class="doc-text">屏幕小，点不准就用按钮/方向键；多人游戏把表放桌上轮流操作。</text>
+          <text class="doc-text">全部纯本地运行，不联网、不收集数据。</text>
+        </div>
+      </div>
+    </scroll>
+  </div>
+</template>
+
+<style>
+  @import "../../common/theme.css";
+
+  .body {
+    width: 100%;
+    flex-grow: 1;
+    flex-direction: column;
+    align-items: center;
+  }
+</style>
+
+<script>
+  import router from '@system.router';
+  import device from '@system.device';
+
+  export default {
+    private: {
+      listW: 320
+    },
+
+    onInit() {
+      device.getInfo({
+        success: (ret) => {
+          const w = ret && ret.screenWidth;
+          if (typeof w === 'number' && w > 0) this.listW = w - 24;
+        },
+        fail: () => {
+          this.listW = 320;
+        }
+      });
+    },
+
+    goBack() {
+      router.back();
+    }
+  };
+</script>

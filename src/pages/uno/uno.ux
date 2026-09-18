@@ -1,0 +1,564 @@
+<template>
+  <div class="page">
+    <div class="header">
+      <div class="back" onclick="onBack">
+        <text class="back-text">&lt;</text>
+      </div>
+      <text class="header-title">{{ title }}</text>
+    </div>
+
+    <div class="screen" if="{{ phase === 'menu' }}">
+      <div class="grow"></div>
+      <text class="info">选择人数</text>
+      <div class="countbox" style="width: {{ listW }}px;">
+        <div class="cbtn" onclick="minus">
+          <text class="ctext">－</text>
+        </div>
+        <text class="cnum">{{ playerCount }} 人</text>
+        <div class="cbtn" onclick="plus">
+          <text class="ctext">＋</text>
+        </div>
+      </div>
+      <div class="list" style="width: {{ listW }}px;">
+        <div class="card" onclick="startAi">
+          <text class="card-text">对战 AI（你 + {{ playerCount - 1 }} AI）</text>
+          <text class="card-arrow">&gt;</text>
+        </div>
+        <div class="card" onclick="startHotseat">
+          <text class="card-text">同表多人（{{ playerCount }} 人轮流）</text>
+          <text class="card-arrow">&gt;</text>
+        </div>
+        <div class="card" onclick="goRules">
+          <text class="card-text">玩法说明</text>
+          <text class="card-arrow">&gt;</text>
+        </div>
+      </div>
+      <div class="grow"></div>
+      <text class="hint">同表多人：把表传给下一位，各看各的牌</text>
+    </div>
+
+    <div class="screen" if="{{ phase === 'play' }}">
+      <text class="nowchip {{ nowCls }}">{{ nowName }}</text>
+      <text class="info">{{ statusText }}</text>
+      <text class="sub">{{ hist }}</text>
+      <text class="sub">{{ colorTip }}</text>
+      <text class="sub" for="{{ otherList }}" tid="k">{{ $item.t }}</text>
+
+      <div class="grow"></div>
+
+      <div class="hand">
+        <div class="hrow">
+          <div class="{{ s0 }}" onclick="pick0">
+            <text class="{{ s0c }}">{{ s0t }}</text>
+          </div>
+          <div class="{{ s1 }}" onclick="pick1">
+            <text class="{{ s1c }}">{{ s1t }}</text>
+          </div>
+          <div class="{{ s2 }}" onclick="pick2">
+            <text class="{{ s2c }}">{{ s2t }}</text>
+          </div>
+          <div class="{{ s3 }}" onclick="pick3">
+            <text class="{{ s3c }}">{{ s3t }}</text>
+          </div>
+          <div class="{{ s4 }}" onclick="pick4">
+            <text class="{{ s4c }}">{{ s4t }}</text>
+          </div>
+          <div class="{{ s5 }}" onclick="pick5">
+            <text class="{{ s5c }}">{{ s5t }}</text>
+          </div>
+        </div>
+        <div class="hrow">
+          <div class="{{ s6 }}" onclick="pick6">
+            <text class="{{ s6c }}">{{ s6t }}</text>
+          </div>
+          <div class="{{ s7 }}" onclick="pick7">
+            <text class="{{ s7c }}">{{ s7t }}</text>
+          </div>
+          <div class="{{ s8 }}" onclick="pick8">
+            <text class="{{ s8c }}">{{ s8t }}</text>
+          </div>
+          <div class="{{ s9 }}" onclick="pick9">
+            <text class="{{ s9c }}">{{ s9t }}</text>
+          </div>
+          <div class="{{ s10 }}" onclick="pick10">
+            <text class="{{ s10c }}">{{ s10t }}</text>
+          </div>
+          <div class="{{ s11 }}" onclick="pick11">
+            <text class="{{ s11c }}">{{ s11t }}</text>
+          </div>
+        </div>
+      </div>
+
+      <div class="ops">
+        <div class="btn btn-main" onclick="doPlay">
+          <text class="bt bt-main">出牌</text>
+        </div>
+        <div class="btn" onclick="doDraw">
+          <text class="bt">摸牌</text>
+        </div>
+        <div class="btn btn-s" onclick="pagePrev" if="{{ pagerOn }}">
+          <text class="bt">上页</text>
+        </div>
+        <div class="btn btn-s" onclick="pageNext" if="{{ pagerOn }}">
+          <text class="bt">下页</text>
+        </div>
+      </div>
+    </div>
+
+    <!-- 同表多人：轮换交接遮罩 -->
+    <div class="overlay" if="{{ cover }}">
+      <text class="overtext">{{ coverText }}</text>
+      <div class="ops">
+        <div class="btn btn-main" onclick="revealHand">
+          <text class="bt bt-main">查看手牌</text>
+        </div>
+      </div>
+    </div>
+
+    <div class="overlay" if="{{ needsColor }}">
+      <text class="overtext">万能牌 · 选个颜色</text>
+      <div class="ops">
+        <div class="btn c-r" onclick="pickR">
+          <text class="bt bt-main">红</text>
+        </div>
+        <div class="btn c-g" onclick="pickG">
+          <text class="bt bt-main">绿</text>
+        </div>
+        <div class="btn c-b" onclick="pickB">
+          <text class="bt bt-main">蓝</text>
+        </div>
+        <div class="btn c-y" onclick="pickY">
+          <text class="bt bt-main">黄</text>
+        </div>
+      </div>
+    </div>
+
+    <div class="overlay" if="{{ over }}">
+      <text class="overtext">{{ overText }}</text>
+      <div class="ops">
+        <div class="btn btn-main" onclick="restart">
+          <text class="bt bt-main">再来一局</text>
+        </div>
+        <div class="btn" onclick="onBack">
+          <text class="bt">返回</text>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style>
+  @import "../../common/theme.css";
+
+  .c-r {
+    background-color: #d64545;
+  }
+  .c-g {
+    background-color: #2f9e44;
+  }
+  .c-b {
+    background-color: #2b6cb0;
+  }
+  .c-y {
+    background-color: #d9a520;
+  }
+</style>
+
+<script>
+  import router from '@system.router';
+  import device from '@system.device';
+  import prompt from '@system.prompt';
+  import {
+    createGame,
+    cardText,
+    isWild,
+    canPlay,
+    topCard,
+    playCard,
+    drawOne,
+    passTurn,
+    aiDecide,
+    handCounts,
+    COLOR_NAME
+  } from '../../common/uno';
+  import { defaultNames, colorOf } from '../../common/setup';
+
+  const SLOTS = 12;
+
+  export default {
+    private: {
+      phase: 'menu',
+      mode: 'ai', // ai | hotseat
+      title: 'UNO',
+      listW: 320,
+      playerCount: 3,
+
+      game: null,
+      viewer: 0,
+      cover: false,
+      coverText: '',
+      sel: 0,
+      page: 0,
+      pagerOn: false,
+      otherList: [],
+      statusText: '',
+      colorTip: '',
+      needsColor: false,
+      over: false,
+      overText: '',
+      drewThisTurn: false,
+      names: [],
+      colors: [],
+      nowName: '',
+      nowCls: 'nowchip pc-r',
+      hist: '',
+
+      s0: 'tile tile-dim', s0t: '', s0c: 'tiletext-dim',
+      s1: 'tile tile-dim', s1t: '', s1c: 'tiletext-dim',
+      s2: 'tile tile-dim', s2t: '', s2c: 'tiletext-dim',
+      s3: 'tile tile-dim', s3t: '', s3c: 'tiletext-dim',
+      s4: 'tile tile-dim', s4t: '', s4c: 'tiletext-dim',
+      s5: 'tile tile-dim', s5t: '', s5c: 'tiletext-dim',
+      s6: 'tile tile-dim', s6t: '', s6c: 'tiletext-dim',
+      s7: 'tile tile-dim', s7t: '', s7c: 'tiletext-dim',
+      s8: 'tile tile-dim', s8t: '', s8c: 'tiletext-dim',
+      s9: 'tile tile-dim', s9t: '', s9c: 'tiletext-dim',
+      s10: 'tile tile-dim', s10t: '', s10c: 'tiletext-dim',
+      s11: 'tile tile-dim', s11t: '', s11c: 'tiletext-dim',
+
+      aiTimer: null
+    },
+
+    onInit() {
+      device.getInfo({
+        success: (ret) => {
+          const w = ret && ret.screenWidth;
+          if (typeof w === 'number' && w > 0) this.listW = w - 24;
+        },
+        fail: () => {
+          this.listW = 320;
+        }
+      });
+    },
+
+    onHide() {
+      this.clearAi();
+    },
+
+    onDestroy() {
+      this.clearAi();
+    },
+
+    onBackPress() {
+      return this.phase === 'play';
+    },
+
+    minus() {
+      if (this.playerCount > 2) this.playerCount--;
+    },
+
+    plus() {
+      if (this.playerCount < 4) this.playerCount++;
+    },
+
+    startAi() {
+      this.startGame(this.playerCount, 'ai');
+    },
+
+    startHotseat() {
+      this.startGame(this.playerCount, 'hotseat');
+    },
+
+    startGame(count, mode) {
+      this.playerCount = count;
+      this.mode = mode || this.mode;
+      this.game = createGame(count);
+      this.names = defaultNames(count);
+      this.colors = [];
+      for (let i = 0; i < count; i++) this.colors.push(colorOf(i));
+      this.sel = 0;
+      this.page = 0;
+      this.over = false;
+      this.needsColor = false;
+      this.drewThisTurn = false;
+      this.viewer = 0;
+      this.cover = this.mode === 'hotseat';
+      this.coverText = '轮到 1 号 · 请把表交给 TA';
+      this.phase = 'play';
+      this.title = 'UNO · ' + count + ' 人' + (this.mode === 'hotseat' ? ' · 同表' : '');
+      this.refresh();
+      this.afterAction();
+    },
+
+    restart() {
+      this.startGame(this.playerCount, this.mode);
+    },
+
+    revealHand() {
+      this.cover = false;
+      this.sel = 0;
+      this.page = 0;
+      this.renderHand();
+    },
+
+    refresh() {
+      const s = this.game;
+      if (!s) return;
+      this.clearAi();
+      if (this.mode === 'hotseat') this.viewer = s.current;
+
+      const t = topCard(s);
+      this.colorTip = '当前色 ' + (COLOR_NAME[s.color] || '') + ' · 上家出 ' + cardText(t);
+      const counts = handCounts(s);
+      const others = [];
+      for (let p = 0; p < counts.length; p++) {
+        if (p === this.viewer) continue;
+        others.push({ k: p + 1, t: (p + 1) + '号 · ' + counts[p] + ' 张' });
+      }
+      this.otherList = others;
+
+      if (s.winner >= 0) {
+        this.over = true;
+        this.cover = false;
+        this.overText = (s.winner + 1) + '号 赢了！';
+        this.statusText = this.overText;
+      } else if (this.mode === 'hotseat') {
+        this.statusText = '轮到 ' + (s.current + 1) + '号（手里 ' + counts[s.current] + ' 张）';
+      } else {
+        this.statusText = '轮到 ' + (this.names[s.current] || s.current + 1 + '号') + ' · 手里 ' + counts[s.current] + ' 张';
+      }
+      this.nowName = this.names[s.current] || s.current + 1 + '号';
+      this.nowCls = 'nowchip ' + (this.colors[s.current] || 'pc-r');
+      this.hist = s.log.slice(-2).join(' · ');
+
+      const hand = s.hands[this.viewer];
+      if (this.sel > hand.length - 1) this.sel = hand.length - 1;
+      if (this.sel < 0) this.sel = 0;
+      this.page = Math.floor(this.sel / SLOTS);
+      this.renderHand();
+    },
+
+    renderHand() {
+      const s = this.game;
+      if (!s) return;
+      const hand = s.hands[this.viewer] || [];
+      const start = this.page * SLOTS;
+      for (let k = 0; k < SLOTS; k++) {
+        const idx = start + k;
+        const has = idx < hand.length;
+        const sel = idx === this.sel;
+        this['s' + k] = !has ? 'tile tile-dim' : sel ? 'tile tile-sel' : 'tile';
+        this['s' + k + 't'] = has ? cardText(hand[idx]) : '';
+        this['s' + k + 'c'] = !has ? 'tiletext-dim' : 'tiletext';
+      }
+      this.pagerOn = hand.length > SLOTS;
+    },
+
+    pickSlot(k) {
+      const s = this.game;
+      if (!s || this.over || this.needsColor || this.cover) return;
+      if (s.current !== this.viewer) return;
+      const idx = this.page * SLOTS + k;
+      if (idx >= s.hands[this.viewer].length) return;
+      this.sel = idx;
+      this.renderHand();
+    },
+
+    pick0() {
+      this.pickSlot(0);
+    },
+    pick1() {
+      this.pickSlot(1);
+    },
+    pick2() {
+      this.pickSlot(2);
+    },
+    pick3() {
+      this.pickSlot(3);
+    },
+    pick4() {
+      this.pickSlot(4);
+    },
+    pick5() {
+      this.pickSlot(5);
+    },
+    pick6() {
+      this.pickSlot(6);
+    },
+    pick7() {
+      this.pickSlot(7);
+    },
+    pick8() {
+      this.pickSlot(8);
+    },
+    pick9() {
+      this.pickSlot(9);
+    },
+    pick10() {
+      this.pickSlot(10);
+    },
+    pick11() {
+      this.pickSlot(11);
+    },
+
+    pagePrev() {
+      const n = this.game ? Math.max(1, Math.ceil(this.game.hands[this.viewer].length / SLOTS)) : 1;
+      this.page = (this.page - 1 + n) % n;
+      this.renderHand();
+    },
+
+    pageNext() {
+      const n = this.game ? Math.max(1, Math.ceil(this.game.hands[this.viewer].length / SLOTS)) : 1;
+      this.page = (this.page + 1) % n;
+      this.renderHand();
+    },
+
+    doPlay() {
+      const s = this.game;
+      if (!s || this.over || this.needsColor || this.cover) return;
+      if (s.current !== this.viewer) return;
+      const card = s.hands[this.viewer][this.sel];
+      if (!card) return;
+      if (!canPlay(s, card)) {
+        this.hint('这张牌出不了');
+        return;
+      }
+      if (isWild(card)) {
+        this.needsColor = true;
+        return;
+      }
+      this.commitPlay(this.sel, null);
+    },
+
+    commitPlay(idx, color) {
+      const r = playCard(this.game, idx, color);
+      if (!r.ok) {
+        this.hint(r.msg);
+        return;
+      }
+      this.needsColor = false;
+      this.drewThisTurn = false;
+      this.afterMove();
+    },
+
+    pickR() {
+      this.commitPlay(this.sel, 'r');
+    },
+    pickG() {
+      this.commitPlay(this.sel, 'g');
+    },
+    pickB() {
+      this.commitPlay(this.sel, 'b');
+    },
+    pickY() {
+      this.commitPlay(this.sel, 'y');
+    },
+
+    doDraw() {
+      const s = this.game;
+      if (!s || this.over || this.needsColor || this.cover) return;
+      if (s.current !== this.viewer) return;
+      if (this.drewThisTurn) {
+        passTurn(s);
+        this.drewThisTurn = false;
+        this.afterMove();
+        return;
+      }
+      const r = drawOne(s);
+      if (!r.ok) {
+        this.hint('牌堆空了，过牌');
+        passTurn(s);
+        this.afterMove();
+        return;
+      }
+      this.drewThisTurn = true;
+      if (r.playable) {
+        this.sel = s.hands[this.viewer].length - 1;
+        this.page = Math.floor(this.sel / SLOTS);
+        this.hint('摸到 ' + cardText(r.card) + '，可以直接出');
+        this.refresh();
+      } else {
+        this.hint('摸到 ' + cardText(r.card) + '，出不了，跳过');
+        passTurn(s);
+        this.drewThisTurn = false;
+        this.afterMove();
+      }
+    },
+
+    /** 一次行动结束后：同表模式换人交接；AI 模式驱动电脑 */
+    afterMove() {
+      const s = this.game;
+      if (!s) return;
+      if (s.winner >= 0) {
+        this.refresh();
+        return;
+      }
+      if (this.mode === 'hotseat') {
+        this.viewer = s.current;
+        this.sel = 0;
+        this.page = 0;
+        this.cover = true;
+        this.coverText = '轮到 ' + (s.current + 1) + '号 · 请把表交给 TA';
+        this.refresh();
+        return;
+      }
+      this.refresh();
+      this.afterAction();
+    },
+
+    afterAction() {
+      const s = this.game;
+      if (!s) return;
+      if (s.winner >= 0) return;
+      if (this.mode === 'ai' && s.current !== 0) this.scheduleAi();
+    },
+
+    scheduleAi() {
+      this.clearAi();
+      this.aiTimer = setTimeout(() => {
+        this.aiTimer = null;
+        const s = this.game;
+        if (!s || s.winner >= 0 || s.current === 0 || this.mode !== 'ai') return;
+        const d = aiDecide(s);
+        if (d.type === 'play') {
+          playCard(s, d.idx, d.color);
+        } else {
+          const dr = drawOne(s);
+          if (dr.ok && dr.playable) playCard(s, s.hands[s.current].length - 1, null);
+          else passTurn(s);
+        }
+        this.refresh();
+        if (s.winner < 0 && s.current !== 0) this.scheduleAi();
+      }, 520);
+    },
+
+    clearAi() {
+      if (this.aiTimer) {
+        clearTimeout(this.aiTimer);
+        this.aiTimer = null;
+      }
+    },
+
+    onBack() {
+      this.clearAi();
+      if (this.phase === 'play') {
+        this.game = null;
+        this.over = false;
+        this.needsColor = false;
+        this.cover = false;
+        this.phase = 'menu';
+        this.title = 'UNO';
+        return;
+      }
+      router.back();
+    },
+
+    goRules() {
+      router.push({ uri: '/pages/rules' });
+    },
+
+    hint(msg) {
+      prompt.showToast({ message: msg, duration: 1200 });
+    }
+  };
+</script>

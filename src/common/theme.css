@@ -1,0 +1,201 @@
+/* 腕上节拍器 · 公共样式
+   布局原则：全部 flex 流式布局，不用绝对定位排交互元素（真机窗口坐标不可靠）。
+   颜色：纯黑底 + 青色主色，手环上对比度最舒服。
+   注意：Vela 不支持渐变，一律纯色 / rgba；只支持 class 选择器。 */
+
+.page {
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  padding: 8px;
+  background-color: #000000;
+}
+
+.screen {
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+
+.hdr {
+  flex-direction: row;
+  width: 100%;
+  height: 34px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.title {
+  font-size: 22px;
+  font-weight: bold;
+  color: #ffffff;
+}
+
+.sub {
+  font-size: 15px;
+  color: #9aa0a6;
+}
+
+.bpmbox {
+  width: 100%;
+  height: 96px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.bpm {
+  font-size: 72px;
+  font-weight: bold;
+  color: #4dd0e1;
+}
+
+.bpmlab {
+  font-size: 15px;
+  color: #9aa0a6;
+}
+
+.row {
+  flex-direction: row;
+  width: 100%;
+  height: 52px;
+}
+
+.kbtn {
+  flex: 1;
+  height: 46px;
+  margin: 3px 4px;
+  background-color: #202124;
+  border-radius: 23px;
+  justify-content: center;
+  align-items: center;
+}
+
+.kbtntext {
+  font-size: 21px;
+  font-weight: bold;
+  color: #ffffff;
+}
+
+.infobox {
+  width: 100%;
+  height: 46px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.info {
+  font-size: 14px;
+  color: #9aa0a6;
+}
+
+.mainbtn {
+  width: 100%;
+  height: 86px;
+  margin: 3px 0;
+  background-color: #4dd0e1;
+  border-radius: 43px;
+  justify-content: center;
+  align-items: center;
+}
+
+.mainbtntext {
+  font-size: 32px;
+  font-weight: bold;
+  color: #00232a;
+}
+
+.tipbox {
+  width: 100%;
+  height: 28px;
+  justify-content: center;
+  align-items: center;
+}
+
+.tip {
+  font-size: 13px;
+  color: #6b7075;
+}
+
+/* ---------- 运行中的低亮度屏（几乎全黑，只留极暗的拍数） ---------- */
+
+.dim {
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background-color: #000000;
+  padding: 0;
+}
+
+.dimtap {
+  width: 100%;
+  height: 420px;
+  justify-content: center;
+  align-items: center;
+}
+
+.dimnum {
+  font-size: 96px;
+  font-weight: bold;
+  color: #2a2a2a;
+}
+
+.dimbot {
+  width: 100%;
+  height: 44px;
+  justify-content: center;
+  align-items: center;
+}
+
+.dimtip {
+  font-size: 17px;
+  color: #262626;
+}
+
+/* ---------- 设置页 ---------- */
+
+.body {
+  width: 100%;
+  height: 396px;
+}
+
+.grp {
+  width: 100%;
+  flex-direction: column;
+  margin-bottom: 6px;
+}
+
+.grpname {
+  font-size: 14px;
+  color: #9aa0a6;
+  margin-left: 6px;
+  margin-bottom: 2px;
+}
+
+.valrow {
+  width: 100%;
+  height: 40px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+}
+
+.valname {
+  font-size: 17px;
+  color: #e8eaed;
+}
+
+.valtext {
+  font-size: 17px;
+  font-weight: bold;
+  color: #4dd0e1;
+}
+
+.note {
+  font-size: 12px;
+  color: #6b7075;
+  margin-left: 6px;
+  margin-bottom: 4px;
+}

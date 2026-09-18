@@ -1,0 +1,326 @@
+<template>
+  <div class="page">
+    <div class="hdr">
+      <text class="title">设置</text>
+      <text class="sub">{{ strengthText }}</text>
+    </div>
+
+    <scroll class="body" scroll-y="true">
+      <div class="grp">
+        <text class="grpname">速度</text>
+        <div class="valrow">
+          <text class="valname">BPM</text>
+          <text class="valtext">{{ bpm }}</text>
+        </div>
+        <div class="row">
+          <div class="kbtn" onclick="bpmMinus5"><text class="kbtntext">-5</text></div>
+          <div class="kbtn" onclick="bpmPlus5"><text class="kbtntext">+5</text></div>
+        </div>
+        <div class="row">
+          <div class="kbtn" onclick="bpmMinus1"><text class="kbtntext">-1</text></div>
+          <div class="kbtn" onclick="bpmPlus1"><text class="kbtntext">+1</text></div>
+        </div>
+      </div>
+
+      <div class="grp">
+        <text class="grpname">振动时长（原生任务模式生效）</text>
+        <div class="valrow">
+          <text class="valname">时长</text>
+          <text class="valtext">{{ vibMs }} ms</text>
+        </div>
+        <div class="row">
+          <div class="kbtn" onclick="vibMinus"><text class="kbtntext">-10</text></div>
+          <div class="kbtn" onclick="vibPlus"><text class="kbtntext">+10</text></div>
+        </div>
+      </div>
+
+      <div class="grp">
+        <text class="grpname">间隔含义</text>
+        <div class="valrow">
+          <text class="valname">当前</text>
+          <text class="valtext">{{ gapModeText }}</text>
+        </div>
+        <div class="row">
+          <div class="kbtn" onclick="setGapMode"><text class="kbtntext">间隔=停顿</text></div>
+          <div class="kbtn" onclick="setPeriodMode"><text class="kbtntext">间隔=整拍</text></div>
+        </div>
+        <text class="note">周期 = 时长 + 间隔；真机上哪个对就用哪个</text>
+      </div>
+
+      <div class="grp">
+        <text class="grpname">震动引擎</text>
+        <div class="valrow">
+          <text class="valname">当前</text>
+          <text class="valtext">{{ engineText }}</text>
+        </div>
+        <div class="row">
+          <div class="kbtn" onclick="setNative"><text class="kbtntext">原生任务</text></div>
+          <div class="kbtn" onclick="setTimer"><text class="kbtntext">JS 逐拍</text></div>
+        </div>
+        <text class="note">原生任务整段交给系统，息屏后更可能继续；JS 逐拍能做重音</text>
+      </div>
+
+      <div class="grp">
+        <text class="grpname">首拍重音（JS 逐拍模式）</text>
+        <div class="valrow">
+          <text class="valname">当前</text>
+          <text class="valtext">{{ accentText }}</text>
+        </div>
+        <div class="row">
+          <div class="kbtn" onclick="accentOn"><text class="kbtntext">开</text></div>
+          <div class="kbtn" onclick="accentOff"><text class="kbtntext">关</text></div>
+        </div>
+      </div>
+
+      <div class="grp">
+        <text class="grpname">启动后的屏幕</text>
+        <div class="valrow">
+          <text class="valname">当前</text>
+          <text class="valtext">{{ policyText }}</text>
+        </div>
+        <div class="row">
+          <div class="kbtn" onclick="policyDim"><text class="kbtntext">最低亮度</text></div>
+          <div class="kbtn" onclick="policyKeep"><text class="kbtntext">保持常亮</text></div>
+        </div>
+        <div class="row">
+          <div class="kbtn" onclick="policySystem"><text class="kbtntext">跟随系统</text></div>
+          <div class="kbtn" onclick="beatsUnlimited"><text class="kbtntext">拍数不限</text></div>
+        </div>
+        <text class="note">最低亮度：启动即降到最暗并常亮，连点 5 次屏幕恢复原亮度；跟随系统 = 息屏实验</text>
+      </div>
+
+      <div class="grp">
+        <text class="grpname">拍数上限</text>
+        <div class="valrow">
+          <text class="valname">到达后自动停</text>
+          <text class="valtext">{{ maxBeatsText }}</text>
+        </div>
+        <div class="row">
+          <div class="kbtn" onclick="beatsMinus"><text class="kbtntext">-20</text></div>
+          <div class="kbtn" onclick="beatsPlus"><text class="kbtntext">+20</text></div>
+        </div>
+      </div>
+
+      <div class="grp">
+        <text class="grpname">震动强度</text>
+        <text class="note">手环只开放系统级强度（当前 {{ strengthText }}），应用无法单独调速</text>
+        <text class="note">改强度：手环「设置 → 振动强度」或小米运动健康里调</text>
+      </div>
+
+      <div class="grp">
+        <div class="row">
+          <div class="kbtn" onclick="testVib"><text class="kbtntext">试震</text></div>
+          <div class="kbtn" onclick="back"><text class="kbtntext">返回</text></div>
+        </div>
+      </div>
+    </scroll>
+  </div>
+</template>
+
+<style>
+  @import "../../common/theme.css";
+</style>
+
+<script>
+  import router from '@system.router';
+  import vibrator from '@system.vibrator';
+  import storage from '@system.storage';
+  import prompt from '@system.prompt';
+  import {
+    sanitize,
+    gapMsOf,
+    actualPeriodMsOf,
+    LIMITS,
+    clampInt,
+    GAP_STEP
+  } from '../../common/metronome';
+
+  const KEY = 'metronome.settings';
+
+  export default {
+    private: {
+      bpm: 60,
+      vibMs: 60,
+      gapModeText: '间隔=停顿',
+      engineText: '原生任务',
+      accentText: '关',
+      policyText: '最低亮度',
+      maxBeatsText: '不限',
+      strengthText: '强度：标准振动'
+    },
+
+    s: null,
+
+    onInit() {
+      storage.get({
+        key: KEY,
+        success: (d) => {
+          this.apply(this.parse(d));
+        },
+        fail: () => {
+          this.apply(null);
+        }
+      });
+      this.readStrength();
+    },
+
+    parse(d) {
+      if (!d) return null;
+      if (typeof d === 'string') {
+        try {
+          return JSON.parse(d);
+        } catch (e) {
+          return null;
+        }
+      }
+      if (typeof d === 'object' && d.value) return this.parse(d.value);
+      return typeof d === 'object' ? d : null;
+    },
+
+    apply(raw) {
+      const s = sanitize(raw);
+      this.s = s;
+      this.refresh();
+    },
+
+    refresh() {
+      const s = this.s;
+      this.bpm = s.bpm;
+      this.vibMs = s.vibMs;
+      this.gapModeText = s.gapMode === 'period' ? '间隔=整拍' : '间隔=停顿';
+      this.engineText = s.engine === 'timer' ? 'JS 逐拍' : '原生任务';
+      this.accentText = s.accent ? '开' : '关';
+      this.policyText =
+        s.policy === 'dim' ? '最低亮度' : s.policy === 'keep' ? '保持常亮' : '跟随系统';
+      this.maxBeatsText = s.maxBeats > 0 ? s.maxBeats + ' 拍' : '不限';
+    },
+
+    save() {
+      storage.set({ key: KEY, value: JSON.stringify(this.s) });
+    },
+
+    commit() {
+      this.save();
+      this.refresh();
+    },
+
+    readStrength() {
+      try {
+        const m = vibrator.getSystemDefaultMode();
+        const names = ['关闭振动', '标准振动', '加强振动'];
+        this.strengthText = '强度：' + (names[m] || String(m));
+      } catch (e) {
+        this.strengthText = '强度：未知';
+      }
+    },
+
+    /* ---------- 速度 ---------- */
+
+    adjustBpm(delta) {
+      this.s.bpm = clampInt(this.s.bpm + delta, LIMITS.bpm[0], LIMITS.bpm[1]);
+      this.commit();
+    },
+    bpmMinus5() {
+      this.adjustBpm(-5);
+    },
+    bpmPlus5() {
+      this.adjustBpm(5);
+    },
+    bpmMinus1() {
+      this.adjustBpm(-1);
+    },
+    bpmPlus1() {
+      this.adjustBpm(1);
+    },
+
+    /* ---------- 时长 ---------- */
+
+    adjustVib(delta) {
+      this.s.vibMs = clampInt(this.s.vibMs + delta, LIMITS.vibMs[0], LIMITS.vibMs[1]);
+      this.commit();
+    },
+    vibMinus() {
+      this.adjustVib(-10);
+    },
+    vibPlus() {
+      this.adjustVib(10);
+    },
+
+    /* ---------- 开关类 ---------- */
+
+    setGapMode() {
+      this.s.gapMode = 'gap';
+      this.commit();
+    },
+    setPeriodMode() {
+      this.s.gapMode = 'period';
+      this.commit();
+    },
+    setNative() {
+      this.s.engine = 'native';
+      this.commit();
+    },
+    setTimer() {
+      this.s.engine = 'timer';
+      this.commit();
+    },
+    accentOn() {
+      this.s.accent = true;
+      this.commit();
+    },
+    accentOff() {
+      this.s.accent = false;
+      this.commit();
+    },
+    policyDim() {
+      this.s.policy = 'dim';
+      this.commit();
+    },
+    policyKeep() {
+      this.s.policy = 'keep';
+      this.commit();
+    },
+    policySystem() {
+      this.s.policy = 'system';
+      this.commit();
+    },
+
+    /* ---------- 拍数上限 ---------- */
+
+    adjustBeats(delta) {
+      let n = this.s.maxBeats + delta;
+      if (n < LIMITS.maxBeats[0]) n = LIMITS.maxBeats[0];
+      if (n > LIMITS.maxBeats[1]) n = LIMITS.maxBeats[1];
+      if (n > 0 && n < 20) n = 20;
+      this.s.maxBeats = n;
+      this.commit();
+    },
+    beatsMinus() {
+      this.adjustBeats(-20);
+    },
+    beatsPlus() {
+      this.adjustBeats(20);
+    },
+    beatsUnlimited() {
+      this.s.maxBeats = 0;
+      this.commit();
+    },
+
+    /* ---------- 试震 / 返回 ---------- */
+
+    testVib() {
+      vibrator.start({
+        duration: this.s.vibMs,
+        interval: 80,
+        count: 2,
+        fail: (data, code) => {
+          prompt.showToast({ message: '试震失败 ' + code });
+        }
+      });
+    },
+
+    back() {
+      router.back();
+    }
+  };
+</script>

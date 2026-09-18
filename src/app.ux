@@ -1,0 +1,17 @@
+<script>
+  export default {
+    // 全局配置（页面内通过 this.$app.$def.data 访问）
+    data: {
+      appName: '节拍器',
+      version: '0.1.0'
+    },
+
+    onCreate() {
+      console.log('metronome app created');
+    },
+
+    onDestroy() {
+      console.log('metronome app destroyed');
+    }
+  };
+</script>

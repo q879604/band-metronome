@@ -1,0 +1,688 @@
+<template>
+  <div class="page">
+    <div class="header">
+      <div class="back" onclick="onBack">
+        <text class="back-text">&lt;</text>
+      </div>
+      <text class="header-title">{{ title }}</text>
+    </div>
+
+    <div class="screen" if="{{ stage === 'menu' }}">
+      <div class="grow"></div>
+      <text class="info">选择人数（含你自己）</text>
+      <div class="countbox" style="width: {{ listW }}px;">
+        <div class="cbtn" onclick="minus">
+          <text class="ctext">－</text>
+        </div>
+        <text class="cnum">{{ playerCount }} 人</text>
+        <div class="cbtn" onclick="plus">
+          <text class="ctext">＋</text>
+        </div>
+      </div>
+      <div class="list" style="width: {{ listW }}px;">
+        <div class="card" onclick="startAi">
+          <text class="card-text">对战 AI（你 + {{ playerCount - 1 }} AI）</text>
+          <text class="card-arrow">&gt;</text>
+        </div>
+        <div class="card" onclick="startHotseat">
+          <text class="card-text">同表多人（{{ playerCount }} 人轮流）</text>
+          <text class="card-arrow">&gt;</text>
+        </div>
+        <div class="card" onclick="goRules">
+          <text class="card-text">玩法说明</text>
+          <text class="card-arrow">&gt;</text>
+        </div>
+      </div>
+      <div class="grow"></div>
+      <text class="hint">身份按人数自动配比 · 同表模式各看各的手牌与身份</text>
+    </div>
+
+    <div class="screen" if="{{ stage === 'play' }}">
+      <text class="nowchip {{ nowCls }}">{{ nowName }}</text>
+      <text class="info">{{ infoLine }}</text>
+      <text class="sub">{{ hist }}</text>
+      <text class="sub">{{ eventLine }}</text>
+
+      <div class="grow"></div>
+
+      <div class="hand">
+        <div class="hrow">
+          <div class="{{ s0 }}" onclick="pick0">
+            <text class="{{ s0c }}">{{ s0t }}</text>
+          </div>
+          <div class="{{ s1 }}" onclick="pick1">
+            <text class="{{ s1c }}">{{ s1t }}</text>
+          </div>
+          <div class="{{ s2 }}" onclick="pick2">
+            <text class="{{ s2c }}">{{ s2t }}</text>
+          </div>
+          <div class="{{ s3 }}" onclick="pick3">
+            <text class="{{ s3c }}">{{ s3t }}</text>
+          </div>
+          <div class="{{ s4 }}" onclick="pick4">
+            <text class="{{ s4c }}">{{ s4t }}</text>
+          </div>
+          <div class="{{ s5 }}" onclick="pick5">
+            <text class="{{ s5c }}">{{ s5t }}</text>
+          </div>
+        </div>
+        <div class="hrow">
+          <div class="{{ s6 }}" onclick="pick6">
+            <text class="{{ s6c }}">{{ s6t }}</text>
+          </div>
+          <div class="{{ s7 }}" onclick="pick7">
+            <text class="{{ s7c }}">{{ s7t }}</text>
+          </div>
+          <div class="{{ s8 }}" onclick="pick8">
+            <text class="{{ s8c }}">{{ s8t }}</text>
+          </div>
+          <div class="{{ s9 }}" onclick="pick9">
+            <text class="{{ s9c }}">{{ s9t }}</text>
+          </div>
+          <div class="{{ s10 }}" onclick="pick10">
+            <text class="{{ s10c }}">{{ s10t }}</text>
+          </div>
+          <div class="{{ s11 }}" onclick="pick11">
+            <text class="{{ s11c }}">{{ s11t }}</text>
+          </div>
+        </div>
+      </div>
+
+      <div class="ops">
+        <div class="btn btn-main" onclick="doPlay" if="{{ myTurn }}">
+          <text class="bt bt-main">出牌</text>
+        </div>
+        <div class="btn" onclick="endPlay" if="{{ myTurn }}">
+          <text class="bt">结束</text>
+        </div>
+        <div class="btn btn-main" onclick="aiStep" if="{{ aiTurn }}">
+          <text class="bt bt-main">下一步</text>
+        </div>
+      </div>
+    </div>
+
+    <!-- 同表多人：交接 / 响应遮罩 -->
+    <div class="overlay" if="{{ cover }}">
+      <text class="overtext">{{ coverText }}</text>
+      <div class="ops">
+        <div class="btn btn-main" onclick="revealHand">
+          <text class="bt bt-main">查看手牌</text>
+        </div>
+      </div>
+    </div>
+
+    <!-- 选目标 -->
+    <div class="overlay" if="{{ pickTarget }}">
+      <text class="overtext">{{ pickText }}</text>
+      <div class="slots">
+        <div class="srow">
+          <div class="{{ t0 }}" onclick="tgt0">
+            <text class="{{ t0c }}">{{ t0t }}</text>
+          </div>
+          <div class="{{ t1 }}" onclick="tgt1">
+            <text class="{{ t1c }}">{{ t1t }}</text>
+          </div>
+          <div class="{{ t2 }}" onclick="tgt2">
+            <text class="{{ t2c }}">{{ t2t }}</text>
+          </div>
+          <div class="{{ t3 }}" onclick="tgt3">
+            <text class="{{ t3c }}">{{ t3t }}</text>
+          </div>
+        </div>
+        <div class="srow">
+          <div class="{{ t4 }}" onclick="tgt4">
+            <text class="{{ t4c }}">{{ t4t }}</text>
+          </div>
+          <div class="{{ t5 }}" onclick="tgt5">
+            <text class="{{ t5c }}">{{ t5t }}</text>
+          </div>
+          <div class="{{ t6 }}" onclick="tgt6">
+            <text class="{{ t6c }}">{{ t6t }}</text>
+          </div>
+          <div class="{{ t7 }}" onclick="tgt7">
+            <text class="{{ t7c }}">{{ t7t }}</text>
+          </div>
+        </div>
+      </div>
+      <div class="ops">
+        <div class="btn" onclick="cancelTarget">
+          <text class="bt">取消</text>
+        </div>
+      </div>
+    </div>
+
+    <!-- 响应（出闪 / 吃桃 / 决斗出杀） -->
+    <div class="overlay" if="{{ resp }}">
+      <text class="overtext">{{ respText }}</text>
+      <div class="ops">
+        <div class="btn btn-main" onclick="respYes">
+          <text class="bt bt-main">{{ respYesText }}</text>
+        </div>
+        <div class="btn" onclick="respNo">
+          <text class="bt">{{ respNoText }}</text>
+        </div>
+      </div>
+    </div>
+
+    <div class="overlay" if="{{ over }}">
+      <text class="overtext">{{ overText }}</text>
+      <div class="ops">
+        <div class="btn btn-main" onclick="restart">
+          <text class="bt bt-main">再来一局</text>
+        </div>
+        <div class="btn" onclick="onBack">
+          <text class="bt">返回</text>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style>
+  @import "../../common/theme.css";
+</style>
+
+<script>
+  import router from '@system.router';
+  import device from '@system.device';
+  import prompt from '@system.prompt';
+  import {
+    ROLE_NAME,
+    CARD_NAME,
+    createGame,
+    aliveList,
+    playCard,
+    respond,
+    aiTakeTurn,
+    endTurn
+  } from '../../common/sgs';
+  import { defaultNames, colorOf } from '../../common/setup';
+
+  const SLOTS = 12;
+
+  export default {
+    private: {
+      stage: 'menu',
+      mode: 'ai', // ai | hotseat
+      title: '三国杀',
+      playerCount: 5,
+      listW: 320,
+
+      game: null,
+      viewer: 0,
+      cover: false,
+      coverText: '',
+      sel: [],
+      page: 0,
+
+      infoLine: '',
+      eventLine: '',
+      names: [],
+      colors: [],
+      nowName: '',
+      nowCls: 'nowchip pc-r',
+      hist: '',
+      myTurn: false,
+      aiTurn: false,
+
+      resp: false,
+      respText: '',
+      respYesText: '',
+      respNoText: '',
+
+      pickTarget: false,
+      pickText: '',
+      pickCardIdx: -1,
+
+      over: false,
+      overText: '',
+
+      s0: 'tile tile-dim', s0t: '', s0c: 'tiletext-dim',
+      s1: 'tile tile-dim', s1t: '', s1c: 'tiletext-dim',
+      s2: 'tile tile-dim', s2t: '', s2c: 'tiletext-dim',
+      s3: 'tile tile-dim', s3t: '', s3c: 'tiletext-dim',
+      s4: 'tile tile-dim', s4t: '', s4c: 'tiletext-dim',
+      s5: 'tile tile-dim', s5t: '', s5c: 'tiletext-dim',
+      s6: 'tile tile-dim', s6t: '', s6c: 'tiletext-dim',
+      s7: 'tile tile-dim', s7t: '', s7c: 'tiletext-dim',
+      s8: 'tile tile-dim', s8t: '', s8c: 'tiletext-dim',
+      s9: 'tile tile-dim', s9t: '', s9c: 'tiletext-dim',
+      s10: 'tile tile-dim', s10t: '', s10c: 'tiletext-dim',
+      s11: 'tile tile-dim', s11t: '', s11c: 'tiletext-dim',
+
+      t0: 'chip chip-empty', t0t: '', t0c: 'chiptext-dim',
+      t1: 'chip chip-empty', t1t: '', t1c: 'chiptext-dim',
+      t2: 'chip chip-empty', t2t: '', t2c: 'chiptext-dim',
+      t3: 'chip chip-empty', t3t: '', t3c: 'chiptext-dim',
+      t4: 'chip chip-empty', t4t: '', t4c: 'chiptext-dim',
+      t5: 'chip chip-empty', t5t: '', t5c: 'chiptext-dim',
+      t6: 'chip chip-empty', t6t: '', t6c: 'chiptext-dim',
+      t7: 'chip chip-empty', t7t: '', t7c: 'chiptext-dim',
+      tIds: [-1, -1, -1, -1, -1, -1, -1, -1],
+
+      aiTimer: null
+    },
+
+    onInit() {
+      device.getInfo({
+        success: (ret) => {
+          const w = ret && ret.screenWidth;
+          if (typeof w === 'number' && w > 0) this.listW = w - 24;
+        },
+        fail: () => {
+          this.listW = 320;
+        }
+      });
+    },
+
+    onHide() {
+      this.clearAi();
+    },
+
+    onDestroy() {
+      this.clearAi();
+    },
+
+    onBackPress() {
+      return this.stage === 'play';
+    },
+
+    minus() {
+      if (this.playerCount > 2) this.playerCount--;
+    },
+
+    plus() {
+      if (this.playerCount < 8) this.playerCount++;
+    },
+
+    startAi() {
+      this.startGame('ai');
+    },
+
+    startHotseat() {
+      this.startGame('hotseat');
+    },
+
+    startGame(mode) {
+      this.clearAi();
+      this.mode = mode || this.mode;
+      this.game = createGame(this.playerCount, this.mode === 'hotseat');
+      this.names = defaultNames(this.playerCount);
+      this.colors = [];
+      for (let i = 0; i < this.playerCount; i++) this.colors.push(colorOf(i));
+      this.sel = [];
+      this.page = 0;
+      this.over = false;
+      this.resp = false;
+      this.pickTarget = false;
+      this.viewer = 0;
+      this.cover = this.mode === 'hotseat';
+      this.coverText = '1 号（主公）先行动 · 请把表交给 TA';
+      this.stage = 'play';
+      this.title = '三国杀 · ' + this.playerCount + ' 人' + (this.mode === 'hotseat' ? ' · 同表' : '');
+      this.renderAll();
+      if (this.mode === 'ai') this.afterTurn();
+    },
+
+    restart() {
+      this.startGame(this.mode);
+    },
+
+    revealHand() {
+      // 只是「当前这位玩家接过表」：只负责取消遮罩并刷新，**不能**再调 afterTurn（会把遮罩又打开）
+      const g = this.game;
+      if (!g) return;
+      this.cover = false;
+      this.sel = [];
+      this.page = 0;
+      if (g.pending) {
+        this.showResp();
+        return;
+      }
+      this.renderAll();
+    },
+
+    /* ---------------- 渲染 ---------------- */
+
+    renderAll() {
+      const g = this.game;
+      if (!g) return;
+      const p = g.players[this.viewer];
+      this.infoLine =
+        this.nm(this.viewer) + '（' + (this.viewer + 1) + '号）· ' + ROLE_NAME[p.role] +
+        ' · HP ' + p.hp + ' · 手牌 ' + p.hand.length;
+      this.nowName = this.nm(g.current);
+      this.nowCls = 'nowchip ' + (this.colors[g.current] || 'pc-r');
+      this.hist = g.events.slice(-2).join(' · ');
+      this.eventLine = '现在 ' + (g.current + 1) + '号回合 · ' + (g.events[g.events.length - 1] || '');
+      const myPhase = g.current === this.viewer && !g.winner && g.players[this.viewer].alive && !g.pending && !this.cover;
+      this.myTurn = myPhase;
+      this.aiTurn = this.mode === 'ai' && !g.winner && !g.pending && !this.cover && g.current !== 0;
+      this.renderHand();
+    },
+
+    nm(i) {
+      return this.names[i] || (i + 1) + '号';
+    },
+
+    renderHand() {
+      const g = this.game;
+      if (!g) return;
+      const hand = g.players[this.viewer].hand;
+      const start = this.page * SLOTS;
+      for (let k = 0; k < SLOTS; k++) {
+        const idx = start + k;
+        const has = idx < hand.length;
+        const sel = this.sel.indexOf(idx) >= 0;
+        this['s' + k] = !has ? 'tile tile-dim' : sel ? 'tile tile-sel' : 'tile';
+        this['s' + k + 't'] = has ? CARD_NAME[hand[idx].t] : '';
+        this['s' + k + 'c'] = !has ? 'tiletext-dim' : 'tiletext';
+      }
+    },
+
+    selectSlot(k) {
+      const g = this.game;
+      if (!g || !this.myTurn) return;
+      const idx = this.page * SLOTS + k;
+      if (idx >= g.players[this.viewer].hand.length) return;
+      this.sel = [idx];
+      this.renderHand();
+    },
+
+    pick0() {
+      this.selectSlot(0);
+    },
+    pick1() {
+      this.selectSlot(1);
+    },
+    pick2() {
+      this.selectSlot(2);
+    },
+    pick3() {
+      this.selectSlot(3);
+    },
+    pick4() {
+      this.selectSlot(4);
+    },
+    pick5() {
+      this.selectSlot(5);
+    },
+    pick6() {
+      this.selectSlot(6);
+    },
+    pick7() {
+      this.selectSlot(7);
+    },
+    pick8() {
+      this.selectSlot(8);
+    },
+    pick9() {
+      this.selectSlot(9);
+    },
+    pick10() {
+      this.selectSlot(10);
+    },
+    pick11() {
+      this.selectSlot(11);
+    },
+
+    /* ---------------- 出牌 ---------------- */
+
+    doPlay() {
+      const g = this.game;
+      if (!g || !this.myTurn) return;
+      if (!this.sel.length) {
+        this.hint('先点一张牌');
+        return;
+      }
+      const idx = this.sel[0];
+      const card = g.players[this.viewer].hand[idx];
+      if (!card) return;
+      if (card.t === 'sha' || card.t === 'juedou' || card.t === 'chai' || card.t === 'shun') {
+        this.pickCardIdx = idx;
+        this.pickText = '「' + CARD_NAME[card.t] + '」选目标';
+        this.buildTargets();
+        this.pickTarget = true;
+        return;
+      }
+      this.commitPlay(idx, -1);
+    },
+
+    commitPlay(idx, target) {
+      const g = this.game;
+      const r = playCard(g, this.viewer, idx, target);
+      if (!r.ok) {
+        this.hint(r.msg);
+        return;
+      }
+      this.sel = [];
+      this.page = 0;
+      this.pickTarget = false;
+      this.afterAction();
+    },
+
+    endPlay() {
+      const g = this.game;
+      if (!g || !this.myTurn) return;
+      this.sel = [];
+      endTurn(g);
+      this.afterAction();
+    },
+
+    /* ---------------- 目标选择 ---------------- */
+
+    buildTargets() {
+      const g = this.game;
+      const alive = aliveList(g).filter((x) => x !== this.viewer);
+      const ids = [-1, -1, -1, -1, -1, -1, -1, -1];
+      for (let k = 0; k < 8; k++) {
+        if (k < alive.length) {
+          const id = alive[k];
+          ids[k] = id;
+          this['t' + k] = 'chip';
+          this['t' + k + 't'] = (id + 1) + '号 HP' + g.players[id].hp;
+          this['t' + k + 'c'] = 'chiptext';
+        } else {
+          ids[k] = -1;
+          this['t' + k] = 'chip chip-empty';
+          this['t' + k + 't'] = '';
+          this['t' + k + 'c'] = 'chiptext-dim';
+        }
+      }
+      this.tIds = ids;
+    },
+
+    tapTarget(k) {
+      const id = this.tIds[k];
+      if (id == null || id < 0) return;
+      this.commitPlay(this.pickCardIdx, id);
+    },
+
+    tgt0() {
+      this.tapTarget(0);
+    },
+    tgt1() {
+      this.tapTarget(1);
+    },
+    tgt2() {
+      this.tapTarget(2);
+    },
+    tgt3() {
+      this.tapTarget(3);
+    },
+    tgt4() {
+      this.tapTarget(4);
+    },
+    tgt5() {
+      this.tapTarget(5);
+    },
+    tgt6() {
+      this.tapTarget(6);
+    },
+    tgt7() {
+      this.tapTarget(7);
+    },
+
+    cancelTarget() {
+      this.pickTarget = false;
+      this.pickCardIdx = -1;
+    },
+
+    /* ---------------- 回合推进 ---------------- */
+
+    /** 每次行动后的统一入口：判胜负 到 处理挂起（需要谁响应就把表给谁）到 换人 */
+    afterAction() {
+      const g = this.game;
+      if (!g) return;
+      if (g.winner) {
+        this.finish();
+        return;
+      }
+      if (g.pending) {
+        if (this.mode === 'hotseat') {
+          this.viewer = g.pending.who;
+          this.sel = [];
+          this.page = 0;
+          this.cover = true;
+          const t = g.pending.type;
+          this.coverText =
+            (g.pending.who + 1) + '号 ' +
+            (t === 'shan' ? '被杀，需选是否出闪' : t === 'tao' ? '濒死，需选是否吃桃' : '决斗中，需出杀') +
+            ' · 把表交给 TA';
+          this.renderAll();
+          return;
+        }
+        this.showResp();
+        return;
+      }
+      const next = g.current;
+      if (this.mode === 'hotseat') {
+        if (!g.players[next].alive) {
+          endTurn(g);
+          this.viewer = g.current;
+        } else {
+          this.viewer = next;
+        }
+        this.sel = [];
+        this.page = 0;
+        this.cover = true;
+        const p = g.players[this.viewer];
+        this.coverText =
+          '轮到 ' + (this.viewer + 1) + '号（' + ROLE_NAME[p.role] + '）· 把表交给 TA';
+        this.renderAll();
+        return;
+      }
+      this.renderAll();
+      if (g.current !== 0) this.scheduleAi();
+    },
+
+    showResp() {
+      const g = this.game;
+      const pend = g.pending;
+      if (!pend) {
+        this.resp = false;
+        this.afterAction();
+        return;
+      }
+      this.resp = true;
+      if (pend.type === 'shan') {
+        this.respText = (pend.who + 1) + '号：有人对你出杀！';
+        this.respYesText = '出闪';
+        this.respNoText = '掉血';
+      } else if (pend.type === 'tao') {
+        this.respText = (pend.who + 1) + '号：你濒死了！';
+        this.respYesText = '吃桃';
+        this.respNoText = '不救';
+      } else {
+        this.respText = (pend.who + 1) + '号：决斗中，出杀吗？';
+        this.respYesText = '出杀';
+        this.respNoText = '认输';
+      }
+      this.renderAll();
+    },
+
+    respYes() {
+      respond(this.game, true);
+      this.resp = false;
+      this.afterAction();
+    },
+
+    respNo() {
+      respond(this.game, false);
+      this.resp = false;
+      this.afterAction();
+    },
+
+    /* ---------------- AI ---------------- */
+
+    scheduleAi() {
+      this.clearAi();
+      this.aiTimer = setTimeout(() => {
+        this.aiTimer = null;
+        const g = this.game;
+        if (!g || g.winner || this.mode !== 'ai') return;
+        if (g.pending) {
+          this.showResp();
+          return;
+        }
+        if (g.current === 0) {
+          this.renderAll();
+          return;
+        }
+        aiTakeTurn(g, g.current);
+        if (g.winner) {
+          this.finish();
+          return;
+        }
+        if (g.pending) {
+          this.showResp();
+          return;
+        }
+        this.renderAll();
+        if (g.current !== 0) this.scheduleAi();
+      }, 620);
+    },
+
+    aiStep() {
+      this.clearAi();
+      this.scheduleAi();
+    },
+
+    clearAi() {
+      if (this.aiTimer) {
+        clearTimeout(this.aiTimer);
+        this.aiTimer = null;
+      }
+    },
+
+    finish() {
+      const g = this.game;
+      this.over = true;
+      this.cover = false;
+      if (g.winner === 'fan') this.overText = '反贼阵营获胜！';
+      else if (g.winner === 'nei') this.overText = '内奸获胜！';
+      else this.overText = '主公 / 忠臣阵营获胜！';
+      this.resp = false;
+      this.renderAll();
+    },
+
+    onBack() {
+      this.clearAi();
+      if (this.stage === 'play') {
+        this.stage = 'menu';
+        this.over = false;
+        this.cover = false;
+        return;
+      }
+      router.back();
+    },
+
+    goRules() {
+      router.push({ uri: '/pages/rules' });
+    },
+
+    hint(msg) {
+      prompt.showToast({ message: msg, duration: 1200 });
+    }
+  };
+</script>

@@ -1,0 +1,79 @@
+<template>
+  <div class="page">
+    <div class="header">
+      <div class="back" onclick="goBack">
+        <text class="back-text">&lt;</text>
+      </div>
+      <text class="header-title">扑克牌类</text>
+    </div>
+
+    <scroll class="body" scroll-y="true">
+      <div class="list" style="width: {{ listW }}px;">
+        <div class="card" onclick="openDoudizhu">
+          <text class="card-text">斗地主</text>
+          <text class="card-arrow">&gt;</text>
+        </div>
+        <div class="card" onclick="openLiar">
+          <text class="card-text">骗子酒馆</text>
+          <text class="card-arrow">&gt;</text>
+        </div>
+        <div class="card" onclick="goRules">
+          <text class="card-text">玩法说明</text>
+          <text class="card-arrow">&gt;</text>
+        </div>
+      </div>
+      <text class="hint">斗地主：3 人（你 + 2 AI）</text>
+      <text class="hint">骗子酒馆：2 ~ 4 人，考验演技与心理</text>
+    </scroll>
+  </div>
+</template>
+
+<style>
+  @import "../../common/theme.css";
+
+  .body {
+    width: 100%;
+    flex-grow: 1;
+    flex-direction: column;
+    align-items: center;
+  }
+</style>
+
+<script>
+  import router from '@system.router';
+  import device from '@system.device';
+
+  export default {
+    private: {
+      listW: 320
+    },
+
+    onInit() {
+      device.getInfo({
+        success: (ret) => {
+          const w = ret && ret.screenWidth;
+          if (typeof w === 'number' && w > 0) this.listW = w - 24;
+        },
+        fail: () => {
+          this.listW = 320;
+        }
+      });
+    },
+
+    openDoudizhu() {
+      router.push({ uri: '/pages/doudizhu' });
+    },
+
+    openLiar() {
+      router.push({ uri: '/pages/liar' });
+    },
+
+    goRules() {
+      router.push({ uri: '/pages/rules' });
+    },
+
+    goBack() {
+      router.back();
+    }
+  };
+</script>

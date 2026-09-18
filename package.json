@@ -1,0 +1,20 @@
+{
+  "name": "band-metronome",
+  "version": "0.1.0",
+  "private": true,
+  "description": "腕上节拍器 —— 小米手环 / 手表 Vela 快应用（震动节拍 · 最低亮度常亮 · 连点5次恢复亮度）",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "aiot start --watch",
+    "build": "aiot build",
+    "release": "aiot release",
+    "test": "node tools/test-logic.mjs",
+    "icon": "node tools/gen-icon.mjs"
+  },
+  "devDependencies": {
+    "@aiot-toolkit/jsc": "^1.0.3",
+    "aiot-toolkit": "^2.0.5"
+  }
+}

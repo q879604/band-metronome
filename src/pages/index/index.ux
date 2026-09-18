@@ -1,0 +1,401 @@
+<template>
+  <div class="page">
+    <!-- 常规控制屏 -->
+    <div class="screen" if="{{ !runDim }}">
+      <div class="hdr">
+        <text class="title">节拍器</text>
+        <text class="sub">{{ statusText }}</text>
+      </div>
+
+      <div class="bpmbox">
+        <text class="bpm">{{ bpm }}</text>
+        <text class="bpmlab">拍 / 分钟</text>
+      </div>
+
+      <div class="row">
+        <div class="kbtn" onclick="bpmMinus5"><text class="kbtntext">-5</text></div>
+        <div class="kbtn" onclick="bpmPlus5"><text class="kbtntext">+5</text></div>
+      </div>
+
+      <div class="row">
+        <div class="kbtn" onclick="bpmMinus1"><text class="kbtntext">-1</text></div>
+        <div class="kbtn" onclick="bpmPlus1"><text class="kbtntext">+1</text></div>
+      </div>
+
+      <div class="infobox">
+        <text class="info">振动 {{ vibMs }}ms 间隔 {{ gapMs }}ms</text>
+        <text class="info">周期 {{ periodMs }}ms {{ engineText }}</text>
+      </div>
+
+      <div class="mainbtn" onclick="toggleRun">
+        <text class="mainbtntext">{{ runText }}</text>
+      </div>
+
+      <div class="row">
+        <div class="kbtn" onclick="openSettings"><text class="kbtntext">设置</text></div>
+        <div class="kbtn" onclick="testVibrate"><text class="kbtntext">试震</text></div>
+      </div>
+
+      <div class="tipbox">
+        <text class="tip">{{ hintText }}</text>
+      </div>
+    </div>
+
+    <!-- 运行中的低亮度屏：连点 5 次回到常规屏并恢复亮度 -->
+    <div class="dim" if="{{ runDim }}">
+      <div class="dimtap" onclick="tapDim">
+        <text class="dimnum" onclick="tapDim">{{ beatCount }}</text>
+      </div>
+      <div class="dimbot" onclick="tapDim">
+        <text class="dimtip" onclick="tapDim">{{ tapTip }}</text>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style>
+  @import "../../common/theme.css";
+</style>
+
+<script>
+  import router from '@system.router';
+  import vibrator from '@system.vibrator';
+  import brightness from '@system.brightness';
+  import storage from '@system.storage';
+  import prompt from '@system.prompt';
+  import {
+    sanitize,
+    gapMsOf,
+    periodMsOf,
+    actualPeriodMsOf,
+    nativeCountOf,
+    beatIndexAt,
+    LIMITS,
+    clampInt
+  } from '../../common/metronome';
+
+  const KEY = 'metronome.settings';
+  const TAP_NEED = 5; // 连点几次恢复亮度
+  const TAP_WINDOW = 5000; // 连点窗口（ms）
+
+  export default {
+    private: {
+      bpm: 60,
+      vibMs: 60,
+      gapMs: 600,
+      periodMs: 1000,
+      running: false,
+      runDim: false,
+      beatCount: 0,
+      statusText: '就绪',
+      runText: '开始',
+      engineText: '原生任务',
+      hintText: '设置里可调时长 / 间隔 / 屏幕策略',
+      tapTip: '连点 5 次恢复亮度'
+    },
+
+    // 非响应式内部状态
+    s: null,
+    vibTaskId: -1,
+    beatTimer: null,
+    tickTimer: null,
+    startedAt: 0,
+    taps: [],
+    lastTapAt: 0,
+    origValue: -1,
+    origMode: -1,
+    dimApplied: false,
+
+    onInit() {
+      this.loadScreenOrigin();
+      this.load();
+    },
+
+    onShow() {
+      const wasRunning = this.running;
+      this.loadScreenOrigin();
+      this.load();
+      if (wasRunning) this.restart();
+    },
+
+    onHide() {
+      // 离开页面：屏幕状态一定要还原，绝不把用户困在黑屏里
+      this.restoreScreen();
+      // 「跟随系统」是息屏实验模式：故意不停，用来验证息屏后还能不能震动
+      if (this.running && this.s && this.s.policy !== 'system') this.stopRun();
+    },
+
+    onDestroy() {
+      this.stopRun();
+    },
+
+    onBackPress() {
+      if (this.running) {
+        this.stopRun();
+        return true;
+      }
+      return false;
+    },
+
+    /* ---------- 设置读写 ---------- */
+
+    load() {
+      storage.get({
+        key: KEY,
+        success: (d) => {
+          this.applySettings(this.parse(d));
+        },
+        fail: () => {
+          this.applySettings(null);
+        }
+      });
+    },
+
+    parse(d) {
+      if (!d) return null;
+      if (typeof d === 'string') {
+        try {
+          return JSON.parse(d);
+        } catch (e) {
+          return null;
+        }
+      }
+      if (typeof d === 'object' && d.value) return this.parse(d.value);
+      return typeof d === 'object' ? d : null;
+    },
+
+    applySettings(raw) {
+      const s = sanitize(raw);
+      this.s = s;
+      this.bpm = s.bpm;
+      this.vibMs = s.vibMs;
+      this.gapMs = gapMsOf(s);
+      this.periodMs = actualPeriodMsOf(s);
+      this.engineText = s.engine === 'timer' ? 'JS 逐拍' : '原生任务';
+      this.hintText =
+        s.policy === 'dim'
+          ? '启动后降到最低亮度并常亮'
+          : s.policy === 'keep'
+            ? '启动后保持常亮、亮度不变'
+            : '启动后跟随系统（息屏实验）';
+    },
+
+    save() {
+      storage.set({ key: KEY, value: JSON.stringify(this.s) });
+    },
+
+    /* ---------- 屏幕 / 亮度 ---------- */
+
+    loadScreenOrigin() {
+      brightness.getValue({
+        success: (d) => {
+          if (d && typeof d.value === 'number' && d.value >= 0) this.origValue = d.value;
+        },
+        fail: () => {}
+      });
+      brightness.getMode({
+        success: (d) => {
+          if (d && typeof d.mode === 'number') this.origMode = d.mode;
+        },
+        fail: () => {}
+      });
+    },
+
+    applyPolicy() {
+      const p = this.s.policy;
+      if (p === 'dim') {
+        this.dimApplied = true;
+        brightness.setMode({ mode: 0, fail: () => {} });
+        brightness.setValue({ value: 1, fail: () => {} });
+        brightness.setKeepScreenOn({ keepScreenOn: true, fail: () => {} });
+        this.runDim = true;
+      } else if (p === 'keep') {
+        brightness.setKeepScreenOn({ keepScreenOn: true, fail: () => {} });
+        this.runDim = false;
+      } else {
+        brightness.setKeepScreenOn({ keepScreenOn: false, fail: () => {} });
+        this.runDim = false;
+      }
+    },
+
+    restoreScreen() {
+      brightness.setKeepScreenOn({ keepScreenOn: false, fail: () => {} });
+      if (this.dimApplied) {
+        if (this.origValue >= 0) brightness.setValue({ value: this.origValue, fail: () => {} });
+        if (this.origMode >= 0) brightness.setMode({ mode: this.origMode, fail: () => {} });
+        this.dimApplied = false;
+      }
+      this.runDim = false;
+      this.taps = [];
+    },
+
+    /* ---------- 启停 ---------- */
+
+    toggleRun() {
+      if (this.running) this.stopRun();
+      else this.startRun();
+    },
+
+    startRun() {
+      if (this.running) return;
+      if (!this.s) this.applySettings(null);
+      this.applyPolicy();
+      this.running = true;
+      this.runText = '停止';
+      this.statusText = '运行中';
+      this.beatCount = 0;
+      this.tapTip = '连点 5 次恢复亮度';
+      this.taps = [];
+      this.startedAt = Date.now();
+      this.startEngine();
+      this.tickTimer = setInterval(() => {
+        this.tick();
+      }, 200);
+    },
+
+    stopRun() {
+      if (this.running) {
+        this.stopEngine();
+        if (this.tickTimer) {
+          clearInterval(this.tickTimer);
+          this.tickTimer = null;
+        }
+        this.running = false;
+        this.runText = '开始';
+        this.statusText = '已停止';
+      }
+      this.restoreScreen();
+    },
+
+    restart() {
+      if (!this.running) return;
+      this.stopEngine();
+      this.applyPolicy();
+      this.startedAt = Date.now();
+      this.startEngine();
+    },
+
+    startEngine() {
+      const s = this.s;
+      if (s.engine === 'timer') {
+        this.beat();
+        this.beatTimer = setInterval(() => {
+          this.beat();
+        }, periodMsOf(s));
+      } else {
+        vibrator.start({
+          duration: s.vibMs,
+          interval: gapMsOf(s),
+          count: nativeCountOf(s),
+          success: (d) => {
+            if (d && typeof d.id === 'number') this.vibTaskId = d.id;
+          },
+          fail: (data, code) => {
+            console.log('vibrator.start fail, code=' + code);
+            this.statusText = '震动启动失败 ' + code;
+          }
+        });
+      }
+    },
+
+    stopEngine() {
+      if (this.beatTimer) {
+        clearInterval(this.beatTimer);
+        this.beatTimer = null;
+      }
+      if (this.vibTaskId >= 0) {
+        try {
+          vibrator.stop(this.vibTaskId);
+        } catch (e) {
+          console.log('vibrator.stop error ' + e);
+        }
+        this.vibTaskId = -1;
+      }
+    },
+
+    /* ---------- 每拍 / 计数 ---------- */
+
+    beat() {
+      const s = this.s;
+      const strong = s.accent && this.beatCount % 4 === 0;
+      try {
+        vibrator.vibrate({ mode: strong ? 'long' : 'short' });
+      } catch (e) {
+        console.log('vibrate error ' + e);
+      }
+      this.beatCount = this.beatCount + 1;
+    },
+
+    tick() {
+      const s = this.s;
+      const n = beatIndexAt(Date.now() - this.startedAt, periodMsOf(s));
+      if (s.engine !== 'timer') this.beatCount = n;
+      if (s.maxBeats > 0 && n >= s.maxBeats) this.stopRun();
+    },
+
+    /* ---------- 低亮度屏连点解锁 ---------- */
+
+    tapDim() {
+      const now = Date.now();
+      if (now - this.lastTapAt < 130) return; // 防抖：事件冒泡可能双触发
+      this.lastTapAt = now;
+      const list = [];
+      for (let i = 0; i < this.taps.length; i++) {
+        if (now - this.taps[i] < TAP_WINDOW) list.push(this.taps[i]);
+      }
+      list.push(now);
+      this.taps = list;
+      if (list.length >= TAP_NEED) {
+        this.taps = [];
+        this.restoreScreen();
+        this.statusText = '亮度已恢复';
+        return;
+      }
+      this.tapTip = list.length + ' / ' + TAP_NEED + ' 连点恢复亮度';
+    },
+
+    /* ---------- 交互 ---------- */
+
+    adjustBpm(delta) {
+      if (!this.s) this.applySettings(null);
+      this.s.bpm = clampInt(this.s.bpm + delta, LIMITS.bpm[0], LIMITS.bpm[1]);
+      this.save();
+      this.applySettings(this.s);
+      if (this.running) this.restart();
+    },
+
+    bpmMinus5() {
+      this.adjustBpm(-5);
+    },
+    bpmPlus5() {
+      this.adjustBpm(5);
+    },
+    bpmMinus1() {
+      this.adjustBpm(-1);
+    },
+    bpmPlus1() {
+      this.adjustBpm(1);
+    },
+
+    openSettings() {
+      if (this.running) this.stopRun();
+      router.push({ uri: '/pages/settings' });
+    },
+
+    testVibrate() {
+      if (this.running) {
+        prompt.showToast({ message: '运行中，先停止再试震' });
+        return;
+      }
+      if (!this.s) this.applySettings(null);
+      vibrator.start({
+        duration: this.s.vibMs,
+        interval: 80,
+        count: 2,
+        fail: (data, code) => {
+          prompt.showToast({ message: '试震失败 ' + code });
+        }
+      });
+    }
+  };
+</script>
